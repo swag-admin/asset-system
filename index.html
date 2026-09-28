@@ -569,7 +569,7 @@ async function delPhoto(i){
 
 /* ================= EMPLOYEES ================= */
 function viewEmps(){
-  setHead("員工","", isAdmin()?`<button class="btn" data-act="importEmps">匯入 CSV</button><button class="btn" data-act="bulkInventory">產生全員盤點單</button><button class="btn primary" data-act="newEmp">新增員工</button>`:"");
+  setHead("員工","", isAdmin()?`<button class="btn" data-act="exportEmps">匯出 CSV</button><button class="btn" data-act="importEmps">匯入 CSV</button><button class="btn" data-act="bulkInventory">產生全員盤點單</button><button class="btn primary" data-act="newEmp">新增員工</button>`:`<button class="btn" data-act="exportEmps">匯出 CSV</button>`);
   const c=$("#content"); c.classList.add("fixed");
   c.innerHTML=`<div class="toolbar"><label class="search"><span aria-hidden="true" class="muted">⌕</span><input id="eq" placeholder="搜尋姓名、員工編號、部門、Email…" value="${esc(S.ef.q)}" aria-label="搜尋員工"></label></div><div id="elist" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>`;
   S.list=new VList($("#elist"),{grid:"g-emps", onClick:openEmp,
@@ -870,10 +870,21 @@ async function backup(){
   for(const a of assets) delete a.search; for(const s of signoffs) delete s.search;
   download(`資產系統完整備份_${todayStr()}.json`, JSON.stringify({version:1,exported_at:new Date().toISOString(),photo_base_url:`${C.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`,roles,settings,employees,assets,asset_events:events,signoffs},null,1), "application/json");
 }
+function csvTemplate(kind){
+  if(kind==="assets"){
+    const cols=A_CSV.filter(c=>c[0]!=="保管人");
+    const ex={tag:"IT-0001",name:"MacBook Pro 14 吋",cat:"筆記型電腦",brand:"Apple",model:"M3 Pro",serial:"C02XXXXXXX",os:"",_status:"使用中",due_date:"",_empNo:"TW0001",location:"台北 8F",purchase_date:"2025-03-01",warranty_end:"2028-03-01",cost:"62900",note:""};
+    const ex2={tag:"IT-0002",name:"iPhone 15 Pro",cat:"測試機",brand:"Apple",model:"A3102",serial:"",os:"iOS 18.2",_status:"借用中",due_date:"2026-10-31",_empNo:"TW0001",location:"台北 8F",purchase_date:"",warranty_end:"",cost:"",note:""};
+    download("資產匯入範本.csv", toCSV(cols,[ex,ex2]), "text/csv;charset=utf-8");
+  } else {
+    download("員工匯入範本.csv", toCSV(E_CSV,[{emp_no:"TW0001",name:"王小明",dept:"行政部",email:"wang@swag.live",slack_id:"",_active:"是"},{emp_no:"TW0002",name:"陳怡君",dept:"Customer Success",email:"",slack_id:"",_active:"是"}]), "text/csv;charset=utf-8");
+  }
+}
 const STATUS_REV=Object.fromEntries(Object.entries(STATUS).map(([k,v])=>[v,k]));
 function importCSV(kind){
   const isA=kind==="assets";
   modal(`<h2>匯入${isA?"資產":"員工"} CSV</h2><p class="small muted">第一列需為欄位名稱：${(isA?A_CSV.filter(c=>c[0]!=="保管人"):E_CSV).map(c=>c[0]).join("、")}。${isA?"「資產編號」相同的資料會更新，其餘新增；保管人以員工編號對應，請先匯入員工。":"「員工編號」相同的資料會更新，其餘新增。"}</p>
+  <p class="small" style="margin:-4px 0 12px">第一次匯入？<button class="btn sm" data-act="csvTemplate" data-kind="${kind}">下載範本 CSV</button> 用 Excel 打開照格式填寫，存成 CSV 後再上傳。</p>
   <input type="file" accept=".csv,text/csv" id="csvf" class="in"><div class="small" id="csvInfo" style="margin-top:10px"></div><div class="prog hide" id="ip"><i></i></div>
   <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" data-close>取消</button><button class="btn primary" id="igo" disabled>開始匯入</button></div>`);
   let rows=[];
@@ -963,6 +974,7 @@ document.addEventListener("click", async e=>{
     case "backup": backup(); break;
     case "importAssets": importCSV("assets"); break;
     case "importEmps": importCSV("emps"); break;
+    case "csvTemplate": csvTemplate(b.dataset.kind); break;
     case "sendLink": sendLink(); break;
     case "verifyOtp": verifyOtp(); break;
     case "slackLogin": S.sb.auth.signInWithOAuth({provider:"slack_oidc",options:{redirectTo:location.origin+location.pathname}}); break;
