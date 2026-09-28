@@ -230,6 +230,9 @@ textarea.in{resize:vertical;min-height:90px;line-height:1.6}
 @media print{body *{visibility:hidden}}
 
 #root{height:100%}
+.chips .lbl{font-size:12.5px;color:var(--ink-2);align-self:center;margin-right:4px;min-width:2.5em}
+.chips.cat{margin-bottom:6px}
+@media (max-width:860px){ .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none} .chips::-webkit-scrollbar{display:none} .chip{flex-shrink:0} }
 .vt-row.ph{cursor:default}
 .ph-bar{display:block;height:10px;border-radius:5px;background:var(--surface-2);width:70%}
 .login{min-height:100%;display:grid;place-items:center;padding:24px}
@@ -418,9 +421,8 @@ function viewAssets(){
   const c=$("#content"); c.classList.add("fixed");
   c.innerHTML = `<div class="toolbar">
     <label class="search"><span aria-hidden="true" class="muted">⌕</span><input id="aq" placeholder="搜尋編號、名稱、序號、保管人、位置…" value="${esc(S.f.q)}" aria-label="搜尋資產"></label>
-    <select class="in" id="acat" aria-label="類別"><option value="">全部類別</option>${S.cfg.categories.map(x=>`<option ${S.f.cat===x?"selected":""}>${esc(x)}</option>`).join("")}</select>
     <select class="in" id="asort" aria-label="排序"><option value="tag">依編號</option><option value="upd">最近更新</option><option value="name">依名稱</option></select>
-  </div><div class="chips" id="achips"></div><div id="alist" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>`;
+  </div><div class="chips cat" id="catchips" role="group" aria-label="依類別篩選"></div><div class="chips" id="achips" role="group" aria-label="依狀態篩選"></div><div id="alist" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>`;
   $("#asort").value=S.f.sort;
   S.list = new PList($("#alist"), {grid:"g-assets", onClick:openAsset,
     head:`<span></span><span>資產編號</span><span>名稱／型號</span><span class="mh">類別</span><span>狀態</span><span class="mh">保管人</span><span class="mh">位置</span><span class="mh">更新／歸還</span>`,
@@ -430,7 +432,6 @@ function viewAssets(){
     fetch:(from,to)=>q(assetQuery(A_COLS).range(from,to))
   });
   $("#aq").addEventListener("input", debounce(e=>{ S.f.q=e.target.value; updAssets(); },250));
-  $("#acat").addEventListener("change", e=>{ S.f.cat=e.target.value; updAssets(); });
   $("#asort").addEventListener("change", e=>{ S.f.sort=e.target.value; updAssets(); });
   updAssets();
 }
@@ -438,14 +439,33 @@ let statVer=0;
 async function updAssets(keep){
   if(S.view!=="assets"||!S.list) return;
   const v=++statVer, f=S.f;
-  let st; try{ st=await q(S.sb.rpc("asset_stats",{p_words:words(f.q),p_cat:f.cat,p_holder:f.holder||null,p_noholder:false})); }catch(e){ toast(dbErr(e),"err"); return; }
+  let st, cats=null;
+  try{
+    const [a,c]=await Promise.all([
+      q(S.sb.rpc("asset_stats",{p_words:words(f.q),p_cat:f.cat,p_holder:f.holder||null,p_noholder:false})),
+      S.sb.rpc("asset_cat_counts",{p_words:words(f.q),p_holder:f.holder||null})]);
+    st=a;
+    if(c.error){ if(!S.catWarned){ S.catWarned=true; console.warn(c.error); if(isAdmin()) toast("類別數量需要先在 Supabase 執行更新 SQL（update-category-filter.sql）","err"); } }
+    else cats=c.data;
+  }catch(e){ toast(dbErr(e),"err"); return; }
   if(v!==statVer||!S.list) return;
-  S.stats=st;
-  $("#achips").innerHTML = [["","全部",st.all],...Object.entries(STATUS).map(([k,l])=>[k,l,st[k]])]
+  S.stats=st; renderCatChips(cats);
+  $("#achips").innerHTML = `<span class="lbl">狀態</span>`+[["","全部",st.all],...Object.entries(STATUS).map(([k,l])=>[k,l,st[k]])]
     .map(([k,l,n])=>`<button class="chip" data-status="${k}" aria-pressed="${!f.overdue&&f.status===k}">${l}<b>${n.toLocaleString()}</b></button>`).join("")
     + (st.overdue?`<button class="chip" data-overdue="1" aria-pressed="${f.overdue}" style="${f.overdue?"":"color:var(--red);border-color:var(--red)"}">逾期未還<b style="${f.overdue?"":"color:var(--red)"}">${st.overdue}</b></button>`:"");
   $("#subtitle").textContent=`${st.total.toLocaleString()} 筆資產，${st.holders} 位員工持有中`;
   S.list.reset(f.overdue?st.overdue:f.status?st[f.status]:st.all, keep);
+}
+
+function renderCatChips(cats){
+  const box=$("#catchips"); if(!box) return; const f=S.f;
+  const counts=new Map((cats||[]).map(c=>[c.cat,+c.n]));
+  // settings order first, then any other categories found in the data
+  const names=[...S.cfg.categories.filter(c=>counts.get(c)||c===f.cat), ...[...counts.keys()].filter(c=>!S.cfg.categories.includes(c)).sort((a,b)=>a.localeCompare(b,"zh-Hant"))];
+  if(!cats) for(const c of S.cfg.categories) if(!names.includes(c)) names.push(c);
+  const total=[...counts.values()].reduce((a,b)=>a+b,0);
+  box.innerHTML=`<span class="lbl">類別</span><button class="chip" data-cat="" aria-pressed="${!f.cat}">全部${cats?`<b>${total.toLocaleString()}</b>`:""}</button>`+
+    names.map(c=>`<button class="chip" data-cat="${esc(c)}" aria-pressed="${f.cat===c}">${esc(c)}${cats?`<b>${(counts.get(c)||0).toLocaleString()}</b>`:""}</button>`).join("");
 }
 
 /* ---------- asset drawer ---------- */
@@ -936,6 +956,7 @@ document.addEventListener("click", async e=>{
   if(e.target.closest("#lightbox")){ $("#lightbox").classList.remove("on"); return; }
   const nv=e.target.closest("[data-view]"); if(nv){ go(nv.dataset.view); return; }
   if(e.target.closest("[data-close]")){ if(e.target.closest("#modal")) closeModal(); else closeDrawer(); return; }
+  const cc=e.target.closest("[data-cat]"); if(cc&&cc.classList.contains("chip")){ S.f.cat=cc.dataset.cat; updAssets(); return; }
   const ch=e.target.closest("[data-status]"); if(ch){ S.f.status=ch.dataset.status; S.f.overdue=false; updAssets(); return; }
   const od=e.target.closest("[data-overdue]"); if(od){ S.f.overdue=!S.f.overdue; S.f.status=""; updAssets(); return; }
   const sc=e.target.closest("[data-sost]"); if(sc){ S.sf.st=sc.dataset.sost; updSos(); return; }
