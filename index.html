@@ -972,8 +972,8 @@ async function openSo(id){
 function appLink(){ return S.cfg.app_url || (location.origin+location.pathname); }
 function slackMsg(s){
   // 手動貼到 Slack 時 <@ID> 不會變成標記，所以直接用姓名開頭（私訊本人即可收到通知）
-  const who=s.employee_name;
-  return `${who} 你好，行政部已為你建立「${SO_TYPE[s.type]}」（單號 ${s.no}），共 ${s.items.length} 項設備：\n${s.items.slice(0,8).map(it=>`・${it.tag} ${it.name}${it.due?`（請於 ${it.due} 前歸還）`:""}`).join("\n")}${s.items.length>8?`\n・…等 ${s.items.length} 項`:""}\n請用公司 Email 登入資產系統，在「我的資產」確認設備並線上簽名：${appLink()}`;
+  const due=s.items.map(it=>it.due).filter(Boolean).sort()[0];
+  return `${s.employee_name} 你好，你有一張設備簽收單（共 ${s.items.length} 項設備）${due?`，借用設備請於 ${due} 前歸還`:""}，請確認設備並線上簽名：\n${appLink()}`;
 }
 async function copyText(t,ok){ try{ await navigator.clipboard.writeText(t); toast(ok||"已複製"); }catch{ const ta=document.createElement("textarea"); ta.value=t; document.body.append(ta); ta.select(); try{ document.execCommand("copy"); toast(ok||"已複製"); }catch{ toast("無法自動複製，請手動選取文字","err"); } ta.remove(); } }
 async function copyAllSlack(){
