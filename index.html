@@ -7,19 +7,23 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/jf-openhuninn-2.1.woff2" as="font" type="font/woff2" crossorigin>
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
+/* jf open 粉圓（justfont，SIL Open Font License 1.1，授權見 fonts/LICENSE-jf-openhuninn.txt） */
+@font-face{font-family:"jf open 粉圓";src:url("fonts/jf-openhuninn-2.1.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"jf open 粉圓";src:url("fonts/jf-openhuninn-2.1.woff2") format("woff2");font-weight:500;font-style:normal;font-display:swap}
 
 :root{
   --bg:#F1F3F0; --surface:#FFFFFF; --surface-2:#E7EBE6; --ink:#1E2833; --ink-2:#5B6772; --line:#D3D9D2;
   --steel:#34506A; --steel-soft:#DCE5EC; --tag:#F2C230; --tag-ink:#2B2300;
   --red:#B8352B; --red-soft:#F6E1DE; --green:#2E7A57; --green-soft:#DDEFE5; --amber:#9A6412; --amber-soft:#F5EAD4;
   --focus:#2F6FB0; --shadow:0 12px 32px rgba(30,40,51,.16);
-  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
-  --f-code:"Barlow Condensed","Arial Narrow","Noto Sans TC",sans-serif;
+  --f-body:"jf open 粉圓","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-code:"Barlow Condensed","Arial Narrow","jf open 粉圓",sans-serif;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --bg:#141A20; --surface:#1B232B; --surface-2:#242E38; --ink:#E5EAEE; --ink-2:#9AA7B3; --line:#313C47;
@@ -114,7 +118,7 @@ textarea.in{resize:vertical;min-height:90px;line-height:1.6}
 .vt-row .l2{display:block;font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis}
 .vt-empty{padding:48px 20px;text-align:center;color:var(--ink-2)}
 .vt-foot{font-size:12.5px;color:var(--ink-2);padding:6px 16px;border-top:1px solid var(--line);display:flex;justify-content:space-between}
-.g-assets{grid-template-columns:40px 104px minmax(150px,2fr) 100px 96px minmax(90px,1fr) minmax(80px,1fr) 104px}
+.g-assets{grid-template-columns:40px 136px minmax(150px,2fr) 100px 96px minmax(90px,1fr) minmax(80px,1fr) 104px}
 .thumb{width:40px;height:40px;border-radius:6px;background:var(--surface-2) center/cover no-repeat;display:block;overflow:hidden}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .thumb.none{display:grid;place-items:center;color:var(--ink-2);font-size:11px}
@@ -135,6 +139,16 @@ textarea.in{resize:vertical;min-height:90px;line-height:1.6}
 .card .cph{width:100%;aspect-ratio:4/3;border-radius:8px;object-fit:cover;display:block;margin-bottom:8px;background:var(--surface-2)}
 .g-emps{grid-template-columns:100px minmax(100px,1.2fr) minmax(90px,1fr) 80px 110px 80px}
 .g-sos{grid-template-columns:150px 90px minmax(100px,1.3fr) 60px 110px 100px}
+.g-reps{grid-template-columns:96px 136px minmax(140px,1.6fr) minmax(100px,1fr) 90px 96px 100px}
+.vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:4px}
+.vals div{background:var(--surface-2);border-radius:8px;padding:8px 12px}
+.vals dt{font-size:12px;color:var(--ink-2)} .vals dd{margin:0;font:600 18px/1.3 var(--f-code);letter-spacing:.02em}
+.vals dd small{font:12px var(--f-body);color:var(--ink-2);font-weight:400}
+.rs{font-size:12.5px;font-weight:500;padding:1px 8px;border-radius:4px;white-space:nowrap}
+.rs.pending{background:var(--amber-soft);color:var(--amber)} .rs.done{background:var(--green-soft);color:var(--green)} .rs.bad{background:var(--surface-2);color:var(--ink-2)}
+.dep-cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px 12px;margin-top:8px}
+.dep-cats label{display:flex;align-items:center;gap:8px;font-size:13.5px}
+.dep-cats input{width:72px}
 
 /* drawer & modal */
 .scrim{position:fixed;inset:0;background:rgba(15,22,30,.42);z-index:40;display:none}
@@ -219,7 +233,7 @@ textarea.in{resize:vertical;min-height:90px;line-height:1.6}
   .head{padding:14px 16px 10px}
   .content{padding:0 16px 16px}
   .vt-head{display:none}
-  .g-assets,.g-emps,.g-sos{grid-template-columns:auto minmax(0,1fr) auto;gap:10px}
+  .g-assets,.g-emps,.g-sos,.g-reps{grid-template-columns:auto minmax(0,1fr) auto;gap:10px}
   .g-assets{grid-template-columns:40px auto minmax(0,1fr) auto}
   .vt-row>:last-child{text-align:right}
   .brand>div:last-child{display:none}
@@ -266,6 +280,8 @@ const STATUS = {available:"在庫可用", in_use:"使用中", borrowed:"借用�
 const HELD = new Set(["in_use","borrowed","repair"]);
 const SO_TYPE = {issue:"資產設備領用簽收單", borrow:"測試機借用簽收單", return:"資產設備歸還確認單", inventory:"年度資產盤點確認單"};
 const SO_SHORT = {issue:"領用", borrow:"借用", return:"歸還", inventory:"盤點"};
+const REPAIR = {pending:"維修中", fixed:"已修復", parts:"更換零件", replaced:"原廠換新", scrapped:"無法修復，報廢", no_fault:"檢測無異常"};
+const SALVAGE_MODE = {tax:"稅法算法：成本 ÷（耐用年數＋1）", percent:"成本的固定百分比", zero:"不留殘值"};
 const MAX_PHOTOS = 6, PAGE = 100, BUCKET = "asset-photos";
 const A_COLS = "id,tag,name,cat,brand,model,os,status,holder_id,holder_name,due_date,assigned_date,location,updated_at,photos";
 const SO_COLS = "id,no,type,employee_id,employee_name,emp_no,dept,signer_email,items,created_at,voided,paper_signed_at,signed_at";
@@ -274,7 +290,7 @@ const SO_COLS = "id,no,type,employee_id,employee_name,emp_no,dept,signer_email,i
 const S = {
   sb:null, email:"", role:null, me:null, cfg:{company:"",app_url:"",categories:[],terms:""},
   emps:new Map(), counts:new Map(), view:null, list:null, pendingTotal:0,
-  f:{q:"",status:"",cat:"",holder:"",sort:"tag",overdue:false}, ef:{q:""}, sf:{q:"",st:"pending"}
+  f:{q:"",status:"",cat:"",holder:"",sort:"tag",overdue:false}, ef:{q:""}, sf:{q:"",st:"pending"}, rf:{q:"",st:"pending"}
 };
 const isAdmin = () => S.role === "admin";
 const isStaff = () => S.role === "admin" || S.role === "viewer";
@@ -293,6 +309,8 @@ const debounce = (f,ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeo
 const photoUrl = p => `${C.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${p.split("/").map(encodeURIComponent).join("/")}`;
 const coverT = a => a.photos && a.photos[0] ? photoUrl(a.photos[0].t || a.photos[0].p) : "";
 const empName = id => (S.emps.get(id)||{}).name || "";
+const money = n => n==null||n==="" ? "—" : "$"+Math.round(+n).toLocaleString();
+const lifeFor = cat => { const m=S.cfg.dep_life||{}; return m[cat]!=null ? +m[cat] : (+S.cfg.dep_default_life||3); };
 let toastT;
 function toast(msg, kind){ const t=$("#toast"); t.textContent=msg; t.className="toast on"+(kind==="err"?" err":""); clearTimeout(toastT); toastT=setTimeout(()=>t.className="toast",kind==="err"?5500:2600); }
 function dbErr(e){
@@ -368,13 +386,13 @@ function shell(){
 }
 function navViews(){
   const v=[];
-  if(isStaff()) v.push(["assets","資產總覽"],["emps","員工"],["sos","簽收單"]);
+  if(isStaff()) v.push(["assets","資產總覽"],["repairs","維修紀錄"],["emps","員工"],["sos","簽收單"]);
   if(S.me) v.push(["mine","我的資產"]);
   v.push(isAdmin()?["settings","設定與權限"]:["help","權限說明"]);
   return v;
 }
 function renderNav(){
-  $("#nav").innerHTML = navViews().map(([k,l])=>{ const n = k==="sos"?S.pendingTotal : k==="mine"?S.myPending||0 : 0;
+  $("#nav").innerHTML = navViews().map(([k,l])=>{ const n = k==="sos"?S.pendingTotal : k==="mine"?S.myPending||0 : k==="repairs"?S.repairPending||0 : 0;
     return `<button data-view="${k}" ${S.view===k?'aria-current="page"':""}><span>${l}</span>${n?`<span class="badge">${n}</span>`:""}</button>`; }).join("");
 }
 function setHead(title, sub, actions){ $("#title").textContent=title; $("#subtitle").textContent=sub||""; $("#headActions").innerHTML=actions||""; }
@@ -382,11 +400,12 @@ function go(view){
   if(S.list){ S.list.destroy(); S.list=null; }
   S.view=view; closeDrawer(); renderNav();
   const c=$("#content"); c.className="content"; c.scrollTop=0; c.innerHTML="";
-  ({assets:viewAssets, emps:viewEmps, sos:viewSos, mine:viewMine, settings:viewSettings, help:viewHelp}[view])();
+  ({assets:viewAssets, repairs:viewRepairs, emps:viewEmps, sos:viewSos, mine:viewMine, settings:viewSettings, help:viewHelp}[view])();
 }
 async function refreshCounts(){
   if(isStaff()){
     try{ const st=await q(S.sb.rpc("signoff_stats",{p_words:[]})); S.pendingTotal=st.pending; }catch{}
+    try{ const rs=await q(S.sb.rpc("repair_stats")); S.repairPending=rs.pending; S.repairStats=rs; }catch{}
   }
   if(S.me){ const {count}=await S.sb.from("signoffs").select("id",{count:"exact",head:true}).eq("employee_id",S.me.id).eq("voided",false).is("signed_at",null).is("paper_signed_at",null);
     S.myPending=count||0; }
@@ -402,7 +421,7 @@ async function loadEmps(){
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && S.view && !$("#drawer").classList.contains("on") && !$("#modal").classList.contains("on")) softRefresh(); });
 async function softRefresh(){
   await refreshCounts();
-  if(S.view==="assets") updAssets(true); else if(S.view==="sos") updSos(true); else if(S.view==="emps"){ await loadEmps(); updEmps(true); } else if(S.view==="mine") viewMine();
+  if(S.view==="assets") updAssets(true); else if(S.view==="sos") updSos(true); else if(S.view==="repairs") loadRepairs(true); else if(S.view==="emps"){ await loadEmps(); updEmps(true); } else if(S.view==="mine") viewMine();
 }
 
 /* ================= ASSETS ================= */
@@ -417,7 +436,7 @@ function assetQuery(sel){
   return x.order(col,{ascending:asc}).order("id");
 }
 function viewAssets(){
-  setHead("資產總覽","", isAdmin()?`<button class="btn" data-act="exportAssets">匯出 CSV</button><button class="btn" data-act="importAssets">匯入 CSV</button><button class="btn primary" data-act="newAsset">新增資產</button>`:`<button class="btn" data-act="exportAssets">匯出 CSV</button>`);
+  setHead("資產總覽","", isAdmin()?`<button class="btn" data-act="exportValues">價值報表 CSV</button><button class="btn" data-act="exportAssets">匯出 CSV</button><button class="btn" data-act="importAssets">匯入 CSV</button><button class="btn primary" data-act="newAsset">新增資產</button>`:`<button class="btn" data-act="exportValues">價值報表 CSV</button><button class="btn" data-act="exportAssets">匯出 CSV</button>`);
   const c=$("#content"); c.classList.add("fixed");
   c.innerHTML = `<div class="toolbar">
     <label class="search"><span aria-hidden="true" class="muted">⌕</span><input id="aq" placeholder="搜尋編號、名稱、序號、保管人、位置…" value="${esc(S.f.q)}" aria-label="搜尋資產"></label>
@@ -454,6 +473,7 @@ async function updAssets(keep){
     .map(([k,l,n])=>`<button class="chip" data-status="${k}" aria-pressed="${!f.overdue&&f.status===k}">${l}<b>${n.toLocaleString()}</b></button>`).join("")
     + (st.overdue?`<button class="chip" data-overdue="1" aria-pressed="${f.overdue}" style="${f.overdue?"":"color:var(--red);border-color:var(--red)"}">逾期未還<b style="${f.overdue?"":"color:var(--red)"}">${st.overdue}</b></button>`:"");
   $("#subtitle").textContent=`${st.total.toLocaleString()} 筆資產，${st.holders} 位員工持有中`;
+  S.sb.rpc("asset_value_summary").then(({data})=>{ if(data&&S.view==="assets"&&v===statVer) $("#subtitle").textContent=`${st.total.toLocaleString()} 筆資產，${st.holders} 位員工持有中，帳面價值 ${money(data.book)}（原始成本 ${money(data.cost)}）`; });
   S.list.reset(f.overdue?st.overdue:f.status?st[f.status]:st.all, keep);
 }
 
@@ -481,10 +501,12 @@ async function nextTag(){
     const m=r[0]&&/^IT-(\d+)$/.exec(r[0].tag); const n=m?+m[1]+1:1; return "IT-"+String(n).padStart(Math.max(4,m?m[1].length:4),"0"); }catch{ return ""; }
 }
 async function openAsset(id){
-  let a=null, ev=[];
+  let a=null, ev=[], extra={val:null,reps:[],asg:[],missing:false};
   if(id){ openDrawer("","<div class='loading'>載入中…</div>","");
     try{ [a,ev]=await Promise.all([q(S.sb.from("assets").select("*").eq("id",id).single()), q(S.sb.from("asset_events").select("at,action,by_email").eq("asset_id",id).order("at",{ascending:false}).limit(30))]); }
-    catch(e){ toast(dbErr(e),"err"); closeDrawer(); return; } }
+    catch(e){ toast(dbErr(e),"err"); closeDrawer(); return; }
+    const [vr,rr,ar]=await Promise.all([S.sb.from("asset_values").select("*").eq("id",id).maybeSingle(), S.sb.from("repairs").select("*").eq("asset_id",id).order("reported_at",{ascending:false}).limit(50), S.sb.from("asset_assignments").select("*").eq("asset_id",id).order("start_date",{ascending:false}).limit(50)]);
+    extra={val:vr.data, reps:rr.data||[], asg:ar.data||[], missing:!!(vr.error||rr.error||ar.error)}; }
   drawerAsset=a;
   const v = a || {tag:await nextTag(), status:"available", cat:S.cfg.categories[0]||"其他"};
   const cats = S.cfg.categories.includes(v.cat)||!v.cat ? S.cfg.categories : [...S.cfg.categories, v.cat];
@@ -505,8 +527,14 @@ async function openAsset(id){
     <label>購入日期<input class="in" type="date" name="purchase_date" value="${esc(v.purchase_date)}"></label>
     <label>保固到期<input class="in" type="date" name="warranty_end" value="${esc(v.warranty_end)}"></label>
     <label>購入金額（元）<input class="in" type="number" min="0" name="cost" value="${esc(v.cost)}"></label>
+    <label>供應商／購買通路<input class="in" name="vendor" value="${esc(v.vendor)}" placeholder="例：Apple 官網、燦坤"></label>
+    <label>採購人<input class="in" name="purchaser" value="${esc(v.purchaser)}"></label>
+    <label>發票／採購單號<input class="in" name="invoice_no" value="${esc(v.invoice_no)}"></label>
+    <label>耐用年數<input class="in" type="number" min="0.5" max="50" step="0.5" name="life_years" value="${esc(v.life_years)}" placeholder="依類別預設 ${lifeFor(v.cat)} 年"></label>
+    <label>預估殘值（元）<input class="in" type="number" min="0" name="salvage" value="${esc(v.salvage)}" placeholder="留空自動計算"></label>
     <label class="full">備註<textarea class="in" name="note" rows="2">${esc(v.note)}</textarea></label>
   </fieldset></form>${a?"":`<p class="small muted" style="margin-top:14px">儲存後就能上傳照片。</p>`}
+  ${a?assetExtraHTML(a,extra):""}
   ${ev.length?`<div class="sec">異動紀錄</div><div class="hist">${ev.map(h=>`<div><span class="num">${fmtDT(h.at)}</span>　${esc(h.action)}${h.by_email?` <span class="muted">（${esc(h.by_email)}）</span>`:""}</div>`).join("")}</div>`:""}`;
   const foot = isAdmin() ? `<button class="btn primary" data-act="saveAsset" data-id="${esc(id||"")}">${a?"儲存變更":"新增資產"}</button>${a?`<button class="btn danger" data-act="delAsset" data-id="${esc(id)}" style="margin-left:auto">刪除</button>`:""}` : "";
   openDrawer(a?`<span class="tag">${esc(a.tag)}</span> ${esc(a.name)}`:"新增資產", body, foot);
@@ -528,6 +556,8 @@ async function saveAsset(id){
   if(fd.status==="borrowed" && !fd.due_date){ toast("請填寫預計歸還日","err"); f.due_date.focus(); return; }
   const data={...fd}; for(const k of ["holder_id","due_date","assigned_date","purchase_date","warranty_end"]) data[k]=data[k]||null;
   data.cost = fd.cost===""?null:Number(fd.cost);
+  data.life_years = fd.life_years===""?null:Number(fd.life_years);
+  data.salvage = fd.salvage===""?null:Number(fd.salvage);
   if(!HELD.has(data.status)) data.holder_id=null; if(data.status!=="borrowed") data.due_date=null; if(!data.holder_id) data.assigned_date=null;
   const btn=$('[data-act="saveAsset"]'); btn.disabled=true;
   try{
@@ -590,6 +620,118 @@ async function delPhoto(i){
   S.sb.storage.from(BUCKET).remove([p.p,p.t].filter(Boolean)).catch(()=>{});
 }
 
+
+/* ---------- value / repairs / usage in asset drawer ---------- */
+const repairBadge = r => `<span class="rs ${r.result==="pending"?"pending":r.result==="scrapped"?"bad":"done"}">${REPAIR[r.result]||""}</span>`;
+const NEED_SQL = "需要先在 Supabase 執行更新 SQL（update-2026-10-repairs-depreciation.sql）";
+function assetExtraHTML(a,x){
+  if(x.missing) return `<div class="sec">價值、維修與使用紀錄</div><p class="small muted">${NEED_SQL}才會顯示。</p>`;
+  const v=x.val; let h=`<div class="sec">價值與折舊</div>`;
+  if(!v||v.cost==null) h+=`<p class="small muted">填入購入金額與購入日期後，系統會自動計算帳面價值。</p>`;
+  else if(v.months_used==null) h+=`<p class="small muted">填入購入日期後，系統會自動計算帳面價值。</p>`;
+  else h+=`<dl class="vals"><div><dt>目前帳面價值</dt><dd>${money(v.book_value)}</dd></div><div><dt>已折舊</dt><dd>${money(v.accumulated_dep)}<small>　${v.months_used} 個月</small></dd></div><div><dt>每月折舊</dt><dd>${money(v.monthly_dep)}</dd></div><div><dt>預估殘值</dt><dd>${money(v.salvage_value)}</dd></div></dl>
+    <p class="small muted" style="margin:6px 0 0">耐用 ${+v.life_years} 年，${+v.book_value<=+v.salvage_value?"已折舊完畢":`預計 ${fmtD(v.fully_depreciated_on)} 折舊完畢`}${+v.repair_total>0?`；累計維修費用 ${money(v.repair_total)}`:""}。</p>`;
+  const open=x.reps.find(r=>r.result==="pending");
+  h+=`<div class="sec row" style="justify-content:space-between"><span>維修紀錄（${x.reps.length}）</span>${isAdmin()&&!open&&a.status!=="retired"?`<button class="btn sm" data-act="newRepair" data-id="${esc(a.id)}">新增報修</button>`:""}</div>`;
+  h+= x.reps.length?`<div class="list">${x.reps.map(r=>`<div class="li" style="cursor:pointer" data-act="openRepair" data-id="${esc(r.id)}"><span class="num muted">${fmtD(r.reported_at)}</span><span class="grow">${esc(r.issue)}${r.vendor?`<span class="muted small">　${esc(r.vendor)}</span>`:""}</span>${r.cost!=null?`<span class="num">${money(r.cost)}</span>`:""}${repairBadge(r)}</div>`).join("")}</div>`:`<p class="small muted">沒有維修紀錄。</p>`;
+  h+=`<div class="sec">使用紀錄（${x.asg.length}）</div>`;
+  h+= x.asg.length?`<div class="list">${x.asg.map(u=>`<div class="li"><span class="grow">${esc(u.employee_name||"（已刪除的員工）")}<span class="muted small">　${u.kind==="borrow"?"借用":"領用"}${u.signoff_no?"・"+esc(u.signoff_no):""}</span></span><span class="num muted">${fmtD(u.start_date)} – ${u.end_date?fmtD(u.end_date):"使用中"}</span></div>`).join("")}</div>`:`<p class="small muted">沒有使用紀錄。</p>`;
+  return h;
+}
+
+/* ---------- repair form ---------- */
+async function openRepair(rid, assetId){
+  let r=null, a;
+  try{
+    if(rid){ r=await q(S.sb.from("repairs").select("*,assets(id,tag,name,holder_id)").eq("id",rid).single()); a=r.assets; }
+    else a=await q(S.sb.from("assets").select("id,tag,name,holder_id,status").eq("id",assetId).single());
+  }catch(e){ toast(/repairs/.test((e&&e.message)||"")?NEED_SQL:dbErr(e),"err"); return; }
+  const v=r||{reported_at:todayStr(),reporter_id:a.holder_id,result:"pending",under_warranty:false};
+  const A=isAdmin(), finished=r&&r.result!=="pending";
+  modal(`<h2>${r?"維修紀錄":"新增報修"}</h2><p class="small muted" style="margin:0 0 12px"><span class="tag">${esc(a.tag)}</span> ${esc(a.name)}${r?"":"。送出後設備狀態會改為「維修中」，完成時自動恢復。"}</p>
+  <form class="form" id="rpf" autocomplete="off"><fieldset style="display:contents" ${A?"":"disabled"}>
+   <label><span class="req">報修日</span><input class="in" type="date" name="reported_at" required value="${esc(v.reported_at)}"></label>
+   <label>報修人<select class="in" name="reporter_id">${empOptions(v.reporter_id)}</select></label>
+   <label class="full"><span class="req">問題描述</span><textarea class="in" name="issue" rows="2" required placeholder="例：螢幕閃爍、電池膨脹、無法開機">${esc(v.issue)}</textarea></label>
+   <label>維修廠商<input class="in" name="vendor" value="${esc(v.vendor)}" placeholder="例：Apple 授權維修中心"></label>
+   <label>送修日<input class="in" type="date" name="sent_at" value="${esc(v.sent_at)}"></label>
+   <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink)"><input type="checkbox" name="under_warranty" ${v.under_warranty?"checked":""}> 保固內維修</label>
+   <label>維修費用（元）<input class="in" type="number" min="0" name="cost" value="${esc(v.cost)}"></label>
+   <label>處理結果<select class="in" name="result">${Object.entries(REPAIR).filter(([k])=>!(finished&&k==="pending")).map(([k,l])=>`<option value="${k}" ${v.result===k?"selected":""}>${k==="pending"?"維修中（尚未完成）":l}</option>`).join("")}</select></label>
+   <label>完成日<input class="in" type="date" name="done_at" value="${esc(v.done_at)}"></label>
+   <label class="full">備註<textarea class="in" name="note" rows="2">${esc(v.note)}</textarea></label>
+  </fieldset></form>
+  <p class="small" id="rHint" style="margin:10px 0 0;color:var(--amber)"></p>
+  <div class="row" style="margin-top:16px;justify-content:flex-end">${A&&r?`<button class="btn danger" id="rDel" style="margin-right:auto">刪除</button>`:""}<button class="btn" data-close>${A?"取消":"關閉"}</button>${A?`<button class="btn primary" id="rGo">${r?"儲存":"送出報修"}</button>`:""}</div>`);
+  const f=$("#rpf");
+  f.addEventListener("change",e=>{ if(e.target.name!=="result") return;
+    if(f.result.value!=="pending"&&!f.done_at.value) f.done_at.value=todayStr();
+    $("#rHint").textContent = f.result.value==="scrapped"&&!finished ? "儲存後，設備狀態會改為「已報廢」。" : f.result.value!=="pending"&&!finished ? "儲存後，設備會恢復成送修前的狀態與保管人。" : ""; });
+  if($("#rGo")) $("#rGo").onclick=async()=>{
+    if(!f.reportValidity()) return;
+    const fd=Object.fromEntries(new FormData(f).entries());
+    const data={reported_at:fd.reported_at, reporter_id:fd.reporter_id||null, issue:String(fd.issue).trim(), vendor:String(fd.vendor||"").trim(), sent_at:fd.sent_at||null,
+      under_warranty:f.under_warranty.checked, cost:fd.cost===""?null:Number(fd.cost), result:fd.result, done_at:fd.done_at||null, note:String(fd.note||"").trim()};
+    if(data.result!=="pending"&&!data.done_at) data.done_at=todayStr();
+    $("#rGo").disabled=true;
+    try{ await run(()=> r ? q(S.sb.from("repairs").update(data).eq("id",r.id)) : q(S.sb.from("repairs").insert({...data,asset_id:a.id})),
+                   r ? "已儲存維修紀錄" : "已建立報修，設備已改為維修中");
+         closeModal(); afterRepairChange(a.id); }
+    catch{ $("#rGo").disabled=false; }
+  };
+  if($("#rDel")) $("#rDel").onclick=()=>confirmBox("刪除這筆維修紀錄？", r.result==="pending"?"設備會恢復成送修前的狀態。刪除後無法復原。":"刪除後無法復原。","刪除",
+    async()=>{ await run(()=>q(S.sb.from("repairs").delete().eq("id",r.id)),"已刪除維修紀錄"); afterRepairChange(a.id); },true);
+}
+function afterRepairChange(assetId){
+  refreshCounts();
+  if($("#drawer").classList.contains("on") && drawerAsset && drawerAsset.id===assetId) openAsset(assetId);
+  if(S.view==="repairs") loadRepairs(true); else if(S.view==="assets") updAssets(true);
+}
+function pickRepairAsset(){
+  modal(`<h2>新增報修</h2><p class="small muted">先找到要送修的設備。</p><label class="search" style="margin-top:8px"><span class="muted" aria-hidden="true">⌕</span><input id="rpq" placeholder="輸入資產編號、名稱、序號或保管人" autocomplete="off"></label><div class="picks" id="rpl"></div>
+    <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" data-close>取消</button></div>`);
+  const inp=$("#rpq"); setTimeout(()=>inp.focus(),30);
+  inp.addEventListener("input",debounce(async()=>{
+    const ws=words(inp.value), box=$("#rpl"); if(!box) return; if(!ws.length){ box.innerHTML=""; return; }
+    let x=S.sb.from("assets").select("id,tag,name,status,holder_name"); for(const w of ws) x=x.like("search",`%${w}%`);
+    const rows=await q(x.order("tag").limit(20)).catch(()=>[]);
+    box.innerHTML=rows.length?rows.map(a=>{ const busy=a.status==="repair"||a.status==="retired";
+      return `<button type="button" ${busy?'disabled style="opacity:.55;cursor:default"':`data-act="newRepair" data-id="${esc(a.id)}"`}><span class="tag">${esc(a.tag)}</span><span style="flex:1;min-width:0">${esc(a.name)}<span class="muted small">　${esc(a.holder_name||STATUS[a.status])}${a.status==="repair"?"（已在維修中）":a.status==="retired"?"（已報廢）":""}</span></span></button>`; }).join("")
+      :`<p class="small muted" style="padding:8px 10px;margin:0">找不到符合的設備。</p>`;
+  },200));
+}
+
+/* ================= REPAIRS ================= */
+function viewRepairs(){
+  setHead("維修紀錄","", isAdmin()?`<button class="btn" data-act="exportRepairs">匯出 CSV</button><button class="btn primary" data-act="pickRepairAsset">新增報修</button>`:`<button class="btn" data-act="exportRepairs">匯出 CSV</button>`);
+  const c=$("#content"); c.classList.add("fixed");
+  c.innerHTML=`<div class="toolbar"><label class="search"><span aria-hidden="true" class="muted">⌕</span><input id="rq" placeholder="搜尋資產編號、名稱、問題、廠商…" value="${esc(S.rf.q)}" aria-label="搜尋維修紀錄"></label></div><div class="chips" id="rchips"></div><div id="rlist" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>`;
+  S.list=new VList($("#rlist"),{grid:"g-reps", onClick:id=>openRepair(id),
+    head:`<span class="mh">報修日</span><span>資產編號</span><span>問題</span><span class="mh">維修廠商</span><span class="mh">費用</span><span class="mh">完成日</span><span>狀態</span>`,
+    row:r=>`<span class="num mh">${fmtD(r.reported_at)}</span><span><span class="tag">${esc((r.assets||{}).tag||"")}</span></span><span>${esc(r.issue)}<span class="l2">${mobile.matches?fmtD(r.reported_at)+"・":""}${esc((r.assets||{}).name||"")}${r.reporter_name?"・"+esc(r.reporter_name):""}</span></span><span class="mh muted small">${esc(r.vendor)}${r.under_warranty?"（保固內）":""}</span><span class="mh num">${r.cost!=null?money(r.cost):""}</span><span class="mh num muted">${r.done_at?fmtD(r.done_at):""}</span><span>${repairBadge(r)}</span>`,
+    empty:()=>S.repsMissing?NEED_SQL+"。":(S.reps&&S.reps.length?"沒有符合條件的維修紀錄。":"還沒有維修紀錄。在資產詳細頁按「新增報修」，或用右上角的按鈕建立。"),
+    foot:n=>`<span>顯示 ${n.toLocaleString()} 筆</span><span>${S.repairStats?`今年維修費用 ${money(S.repairStats.cost_year)}`:""}</span>`
+  });
+  $("#rq").addEventListener("input",debounce(e=>{S.rf.q=e.target.value.trim().toLowerCase(); updRepairs();},150));
+  loadRepairs();
+}
+async function loadRepairs(keep){
+  try{ S.reps=await fetchAll(()=>S.sb.from("repairs").select("*,assets(tag,name)").order("reported_at",{ascending:false}).order("created_at",{ascending:false})); S.repsMissing=false; }
+  catch(e){ console.warn(e); S.reps=[]; S.repsMissing=true; }
+  if(!keep && S.rf.st==="pending" && !S.rf.q && !S.reps.some(r=>r.result==="pending")) S.rf.st="";
+  try{ S.repairStats=await q(S.sb.rpc("repair_stats")); S.repairPending=S.repairStats.pending; renderNav(); }catch{}
+  updRepairs(keep);
+}
+function updRepairs(keep){
+  if(S.view!=="repairs"||!S.list) return;
+  const all=S.reps||[], qq=S.rf.q;
+  const m=all.filter(r=>!qq||[(r.assets||{}).tag,(r.assets||{}).name,r.issue,r.vendor,r.reporter_name,r.note].join(" ").toLowerCase().includes(qq));
+  const pend=m.filter(r=>r.result==="pending").length, cnt={pending:pend,done:m.length-pend,"":m.length};
+  $("#rchips").innerHTML=[["pending","維修中"],["done","已完成"],["","全部"]].map(([k,l])=>`<button class="chip" data-rst="${k}" aria-pressed="${S.rf.st===k}">${l}<b>${cnt[k].toLocaleString()}</b></button>`).join("");
+  $("#subtitle").textContent=`${all.filter(r=>r.result==="pending").length} 件維修中`;
+  S.list.set(m.filter(r=>!S.rf.st||(S.rf.st==="pending")===(r.result==="pending")),keep);
+}
+
 /* ================= EMPLOYEES ================= */
 function viewEmps(){
   setHead("員工","", isAdmin()?`<button class="btn" data-act="exportEmps">匯出 CSV</button><button class="btn" data-act="importEmps">匯入 CSV</button><button class="btn" data-act="bulkInventory">產生全員盤點單</button><button class="btn primary" data-act="newEmp">新增員工</button>`:`<button class="btn" data-act="exportEmps">匯出 CSV</button>`);
@@ -614,9 +756,10 @@ function updEmps(keep){
 }
 async function openEmp(id){
   const e = id ? S.emps.get(id) : null; if(id && !e) return;
-  let mine=[], sos=[];
+  let mine=[], sos=[], used=[];
   if(id){ openDrawer("","<div class='loading'>載入中…</div>","");
-    try{ [mine,sos]=await Promise.all([q(S.sb.from("assets").select("id,tag,name,status,due_date,assigned_date").eq("holder_id",id).order("tag").limit(500)), q(S.sb.from("signoffs").select(SO_COLS).eq("employee_id",id).order("created_at",{ascending:false}).limit(50))]); }
+    try{ let ur; [mine,sos,ur]=await Promise.all([q(S.sb.from("assets").select("id,tag,name,status,due_date,assigned_date").eq("holder_id",id).order("tag").limit(500)), q(S.sb.from("signoffs").select(SO_COLS).eq("employee_id",id).order("created_at",{ascending:false}).limit(50)),
+           S.sb.from("asset_assignments").select("*,assets(id,tag,name)").eq("employee_id",id).not("end_date","is",null).order("start_date",{ascending:false}).limit(200)]); used=ur.data||[]; }
     catch(err){ toast(dbErr(err),"err"); closeDrawer(); return; } }
   const v=e||{active:true}, ro=!isAdmin()?"disabled":"";
   const body=`<form class="form" id="ef" autocomplete="off"><fieldset style="display:contents" ${ro}>
@@ -636,6 +779,7 @@ async function openEmp(id){
       <button class="btn sm" data-act="newSo" data-id="${esc(id)}" data-type="return" ${mine.length?"":"disabled"}>產生歸還單</button>`:""}
       <button class="btn sm ghost" data-act="viewHolder" data-id="${esc(id)}">在資產總覽查看</button>
     </div>
+    ${used.length?`<div class="sec">過去使用過的設備（${used.length}）</div><div class="list">${used.map(u=>`<div class="li"><span class="tag">${esc((u.assets||{}).tag||"")}</span><span class="grow">${esc((u.assets||{}).name||"")}<span class="muted small">　${u.kind==="borrow"?"借用":"領用"}</span></span><span class="num muted">${fmtD(u.start_date)} – ${fmtD(u.end_date)}</span></div>`).join("")}</div>`:""}
     ${sos.length?`<div class="sec">簽收紀錄</div><div class="list">${sos.map(s=>{const st=soStatus(s);return `<div class="li" style="cursor:pointer" data-act="openSo" data-id="${esc(s.id)}"><span class="num">${esc(s.no)}</span><span class="grow muted small">${SO_SHORT[s.type]}・${s.items.length} 項・${fmtD(s.created_at)}</span><span class="stamp ${st.k}">${st.label}</span></div>`;}).join("")}</div>`:""}`:""}`;
   const foot=isAdmin()?`<button class="btn primary" data-act="saveEmp" data-id="${esc(id||"")}">${e?"儲存變更":"新增員工"}</button>${e?`<button class="btn danger" data-act="delEmp" data-id="${esc(id)}" style="margin-left:auto">刪除</button>`:""}`:"";
   openDrawer(e?esc(e.name):"新增員工", body, foot);
@@ -839,18 +983,40 @@ async function viewSettings(){
     <label class="full">資產類別（以頓號或逗號分隔）<input class="in" name="categories" value="${esc(S.cfg.categories.join("、"))}"></label>
     <label class="full">簽收單保管規範<textarea class="in" name="terms" rows="6">${esc(S.cfg.terms)}</textarea></label>
   </div><div class="row" style="margin-top:12px"><button type="button" class="btn primary" data-act="saveCfg">儲存設定</button></div></form>
+  ${depHTML()}
   <div class="panel"><h3>管理員與唯讀名單</h3><p class="small muted" style="margin:4px 0 10px">一般員工不需要加在這裡，只要員工資料有填 Email 就能登入。這裡只列出能管理全部資料的人。</p>
     <div class="list">${roles.map(r=>`<div class="li"><span class="grow">${esc(r.email)}${r.email===S.email?' <span class="muted small">（你）</span>':""}</span><span class="small">${r.role==="admin"?"資產管理員":"唯讀"}</span>${r.email===S.email?"":`<button class="btn sm ghost danger" data-act="delRole" data-email="${esc(r.email)}">移除</button>`}</div>`).join("")}</div>
     <div class="row" style="margin-top:10px"><input class="in" id="roleEmail" type="email" placeholder="name@company.com" style="flex:1;min-width:200px"><select class="in" id="roleSel" style="width:auto"><option value="admin">資產管理員</option><option value="viewer">唯讀</option></select><button class="btn" data-act="addRole">加入</button></div></div>
   <div class="panel"><h3>匯出與備份</h3><p class="small muted" style="margin:4px 0 12px">CSV 可以用 Excel 開啟，也能在 Notion 用「匯入 → CSV」建立資料庫。完整備份包含所有資料與簽名，建議每月下載一次存到公司雲端硬碟。</p>
     <div class="row"><button class="btn" data-act="exportAssets">資產 CSV</button><button class="btn" data-act="exportEmps">員工 CSV</button><button class="btn" data-act="exportSos">簽收紀錄 CSV</button><button class="btn primary" data-act="backup">下載完整備份</button></div></div>
   ${permHTML()}`;
+  const df=$("#depf"); if(df) df.addEventListener("change",e=>{ if(e.target.name==="dep_salvage_mode") $("#pctWrap").classList.toggle("hide",e.target.value!=="percent"); });
+}
+function depHTML(){
+  if(S.cfg.dep_salvage_mode===undefined) return `<div class="panel"><h3>折舊設定</h3><p class="small muted" style="margin:4px 0 0">${NEED_SQL}。</p></div>`;
+  const m=S.cfg.dep_life||{};
+  return `<form class="panel" id="depf"><h3>折舊設定</h3><p class="small muted" style="margin:4px 0 10px">系統用直線法按月計算帳面價值，每天自動更新。設備本身若有填耐用年數或預估殘值，會優先使用設備上的數字。年數與殘值規則請先與會計確認。</p>
+  <div class="form"><label>預設耐用年數<input class="in" type="number" min="0.5" max="50" step="0.5" name="dep_default_life" value="${esc(S.cfg.dep_default_life)}"></label>
+  <label>預估殘值算法<select class="in" name="dep_salvage_mode">${Object.entries(SALVAGE_MODE).map(([k,l])=>`<option value="${k}" ${S.cfg.dep_salvage_mode===k?"selected":""}>${l}</option>`).join("")}</select></label>
+  <label id="pctWrap" class="${S.cfg.dep_salvage_mode==="percent"?"":"hide"}">殘值百分比（%）<input class="in" type="number" min="0" max="100" step="0.5" name="dep_salvage_pct" value="${esc(S.cfg.dep_salvage_pct)}"></label></div>
+  <div class="small" style="margin-top:14px;font-weight:500">各類別耐用年數（留空＝使用預設）</div>
+  <div class="dep-cats">${S.cfg.categories.map(c=>`<label><input class="in" type="number" min="0.5" max="50" step="0.5" data-cat-life="${esc(c)}" value="${m[c]!=null?esc(m[c]):""}" placeholder="${esc(S.cfg.dep_default_life)}" aria-label="${esc(c)} 耐用年數"> ${esc(c)}</label>`).join("")}</div>
+  <div class="row" style="margin-top:12px"><button type="button" class="btn primary" data-act="saveDep">儲存折舊設定</button></div></form>`;
+}
+async function saveDep(){
+  const f=$("#depf"), map={};
+  f.querySelectorAll("[data-cat-life]").forEach(i=>{ const n=Number(i.value); if(i.value!==""&&n>0) map[i.dataset.catLife]=n; });
+  const life=Number(f.dep_default_life.value);
+  if(!(life>0&&life<=50)){ toast("預設耐用年數請填 0.5 到 50 之間的數字","err"); return; }
+  const data={dep_default_life:life, dep_life:map, dep_salvage_mode:f.dep_salvage_mode.value, dep_salvage_pct:Math.min(100,Math.max(0,Number(f.dep_salvage_pct.value)||0)), updated_at:new Date().toISOString()};
+  await run(()=>q(S.sb.from("settings").update(data).eq("id",1)),"已儲存，所有設備的帳面價值已重新計算");
+  Object.assign(S.cfg,data);
 }
 function permHTML(){
   return `<div class="panel"><h3>權限說明</h3><p class="small muted" style="margin:4px 0 0">權限在資料庫層級強制執行，不只是隱藏按鈕。即使有人拿到系統網址，沒被開通的 Email 也看不到任何資料。</p>
   <table class="perm"><thead><tr><th>身分</th><th>怎麼開通</th><th>可以做什麼</th></tr></thead><tbody>
-  <tr><td>資產管理員</td><td>加在「管理員與唯讀名單」</td><td>新增、修改、刪除資產與員工，上傳照片，產生與作廢簽收單，匯入匯出</td></tr>
-  <tr><td>唯讀</td><td>加在「管理員與唯讀名單」</td><td>查看所有資料與簽收單，不能修改</td></tr>
+  <tr><td>資產管理員</td><td>加在「管理員與唯讀名單」</td><td>新增、修改、刪除資產與員工，上傳照片，登記維修，產生與作廢簽收單，調整折舊設定，匯入匯出</td></tr>
+  <tr><td>唯讀</td><td>加在「管理員與唯讀名單」</td><td>查看所有資料、簽收單、維修紀錄與帳面價值，不能修改</td></tr>
   <tr><td>員工</td><td>員工資料填入公司 Email</td><td>只看得到自己名下的設備與簽收單，只能簽自己的單，無法代替他人簽名</td></tr></tbody></table></div>`;
 }
 function viewHelp(){ setHead("權限說明",""); $("#content").innerHTML=permHTML(); }
@@ -869,13 +1035,13 @@ async function addRole(){
 function delRole(email){ confirmBox(`移除 ${email}？`,"移除後他將失去管理權限（若他也是員工，仍可登入查看自己的設備）。","移除",async()=>{ await run(()=>q(S.sb.from("roles").delete().eq("email",email)),"已移除"); viewSettings(); },true); }
 
 /* ================= CSV / backup ================= */
-const A_CSV=[["資產編號","tag"],["名稱","name"],["類別","cat"],["品牌","brand"],["型號","model"],["序號","serial"],["作業系統","os"],["狀態","_status"],["預計歸還","due_date"],["保管人員工編號","_empNo"],["保管人","holder_name"],["領用日","assigned_date"],["存放位置","location"],["購入日期","purchase_date"],["保固到期","warranty_end"],["購入金額","cost"],["備註","note"]];
+const A_CSV=[["資產編號","tag"],["名稱","name"],["類別","cat"],["品牌","brand"],["型號","model"],["序號","serial"],["作業系統","os"],["狀態","_status"],["預計歸還","due_date"],["保管人員工編號","_empNo"],["保管人","holder_name"],["領用日","assigned_date"],["存放位置","location"],["購入日期","purchase_date"],["保固到期","warranty_end"],["購入金額","cost"],["供應商","vendor"],["採購人","purchaser"],["發票號碼","invoice_no"],["耐用年數","life_years"],["預估殘值","salvage"],["備註","note"]];
 const E_CSV=[["員工編號","emp_no"],["姓名","name"],["部門","dept"],["Email","email"],["Slack ID","slack_id"],["在職","_active"]];
 const cell=v=>{ v=String(v??""); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v; };
 const toCSV=(cols,rows)=>"\ufeff"+[cols.map(c=>c[0]).join(","),...rows.map(r=>cols.map(c=>cell(r[c[1]])).join(","))].join("\n");
 async function exportAssets(){
   toast("正在準備檔案…");
-  const rows=await run(()=>fetchAll(()=>S.sb.from("assets").select("tag,name,cat,brand,model,serial,os,status,due_date,holder_id,holder_name,assigned_date,location,purchase_date,warranty_end,cost,note").order("tag")));
+  const rows=await run(()=>fetchAll(()=>S.sb.from("assets").select("tag,name,cat,brand,model,serial,os,status,due_date,holder_id,holder_name,assigned_date,location,purchase_date,warranty_end,cost,vendor,purchaser,invoice_no,life_years,salvage,note").order("tag")));
   download(`資產清單_${todayStr()}.csv`, toCSV(A_CSV, rows.map(a=>({...a,_status:STATUS[a.status],_empNo:(S.emps.get(a.holder_id)||{}).emp_no||""}))), "text/csv;charset=utf-8");
 }
 function exportEmps(){ download(`員工清單_${todayStr()}.csv`, toCSV(E_CSV, Array.from(S.emps.values()).map(e=>({...e,_active:e.active?"是":"否"}))), "text/csv;charset=utf-8"); }
@@ -884,19 +1050,30 @@ async function exportSos(){
   const cols=[["單號","no"],["類型","_t"],["員工編號","emp_no"],["姓名","employee_name"],["部門","dept"],["設備","_items"],["建立時間","_c"],["狀態","_s"],["簽收時間","_a"]];
   download(`簽收紀錄_${todayStr()}.csv`, toCSV(cols, rows.map(s=>{const st=soStatus(s); return {...s,_t:SO_SHORT[s.type],_items:s.items.map(i=>i.tag+" "+i.name).join("；"),_c:fmtDT(s.created_at),_s:st.label,_a:fmtDT(st.at)};})), "text/csv;charset=utf-8");
 }
+async function exportValues(){
+  toast("正在準備檔案…");
+  let rows; try{ rows=await fetchAll(()=>S.sb.from("asset_values").select("*").order("tag")); }catch(e){ toast(NEED_SQL+"，才能匯出價值報表","err"); return; }
+  const cols=[["資產編號","tag"],["名稱","name"],["類別","cat"],["狀態","_st"],["保管人","holder_name"],["購入日期","purchase_date"],["購入金額","cost"],["耐用年數","life_years"],["預估殘值","salvage_value"],["已使用月數","months_used"],["每月折舊","monthly_dep"],["累計折舊","accumulated_dep"],["帳面價值","book_value"],["折舊完畢日","fully_depreciated_on"],["維修次數","repair_count"],["累計維修費用","repair_total"]];
+  download(`資產價值報表_${todayStr()}.csv`, toCSV(cols, rows.map(r=>({...r,_st:STATUS[r.status]}))), "text/csv;charset=utf-8");
+}
+function exportRepairs(){
+  const cols=[["報修日","reported_at"],["資產編號","_tag"],["名稱","_name"],["問題描述","issue"],["報修人","reporter_name"],["維修廠商","vendor"],["保固內","_w"],["送修日","sent_at"],["費用","cost"],["處理結果","_r"],["完成日","done_at"],["備註","note"]];
+  download(`維修紀錄_${todayStr()}.csv`, toCSV(cols,(S.reps||[]).map(r=>({...r,_tag:(r.assets||{}).tag,_name:(r.assets||{}).name,_w:r.under_warranty?"是":"否",_r:REPAIR[r.result]}))), "text/csv;charset=utf-8");
+}
 async function backup(){
   toast("正在打包全部資料…");
   const [roles,settings,employees,assets,events,signoffs]=await run(()=>Promise.all([
     fetchAll(()=>S.sb.from("roles").select("*").order("email")), q(S.sb.from("settings").select("*")),
     fetchAll(()=>S.sb.from("employees").select("*").order("emp_no")), fetchAll(()=>S.sb.from("assets").select("*").order("tag")),
     fetchAll(()=>S.sb.from("asset_events").select("*").order("id")), fetchAll(()=>S.sb.from("signoffs").select("*").order("created_at"))]));
+  const [repairs,assignments]=await Promise.all([fetchAll(()=>S.sb.from("repairs").select("*").order("created_at")).catch(()=>[]), fetchAll(()=>S.sb.from("asset_assignments").select("*").order("id")).catch(()=>[])]);
   for(const a of assets) delete a.search; for(const s of signoffs) delete s.search;
-  download(`資產系統完整備份_${todayStr()}.json`, JSON.stringify({version:1,exported_at:new Date().toISOString(),photo_base_url:`${C.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`,roles,settings,employees,assets,asset_events:events,signoffs},null,1), "application/json");
+  download(`資產系統完整備份_${todayStr()}.json`, JSON.stringify({version:2,exported_at:new Date().toISOString(),photo_base_url:`${C.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`,roles,settings,employees,assets,asset_events:events,signoffs,repairs,asset_assignments:assignments},null,1), "application/json");
 }
 function csvTemplate(kind){
   if(kind==="assets"){
     const cols=A_CSV.filter(c=>c[0]!=="保管人");
-    const ex={tag:"IT-0001",name:"MacBook Pro 14 吋",cat:"筆記型電腦",brand:"Apple",model:"M3 Pro",serial:"C02XXXXXXX",os:"",_status:"使用中",due_date:"",_empNo:"TW0001",assigned_date:"2025-03-05",location:"台北 8F",purchase_date:"2025-03-01",warranty_end:"2028-03-01",cost:"62900",note:""};
+    const ex={tag:"IT-0001",name:"MacBook Pro 14 吋",cat:"筆記型電腦",brand:"Apple",model:"M3 Pro",serial:"C02XXXXXXX",os:"",_status:"使用中",due_date:"",_empNo:"TW0001",assigned_date:"2025-03-05",location:"台北 8F",purchase_date:"2025-03-01",warranty_end:"2028-03-01",cost:"62900",vendor:"Apple 官網",purchaser:"張云馨",invoice_no:"AB-12345678",life_years:"",salvage:"",note:""};
     const ex2={tag:"IT-0002",name:"iPhone 15 Pro",cat:"測試機",brand:"Apple",model:"A3102",serial:"",os:"iOS 18.2",_status:"借用中",due_date:"2026-10-31",_empNo:"TW0001",assigned_date:"2026-09-28",location:"台北 8F",purchase_date:"",warranty_end:"",cost:"",note:""};
     download("資產匯入範本.csv", toCSV(cols,[ex,ex2]), "text/csv;charset=utf-8");
   } else {
@@ -921,7 +1098,7 @@ function importCSV(kind){
     $("#igo").disabled=true; $("#ip").classList.remove("hide");
     const byNo=new Map(Array.from(S.emps.values()).map(e=>[String(e.emp_no).toLowerCase(),e]));
     const dt=v=>/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(v)?v.replace(/\//g,"-"):null;
-    let recs, missing=0; const hasSince=rows.length && Object.prototype.hasOwnProperty.call(rows[0],"領用日");
+    let recs, missing=0; const has=k=>rows.length && Object.prototype.hasOwnProperty.call(rows[0],k); const hasSince=has("領用日");
     if(isA){
       recs=rows.map(r=>{ const emp=r["保管人員工編號"]?byNo.get(r["保管人員工編號"].toLowerCase()):null; if(r["保管人員工編號"]&&!emp) missing++;
         let status=STATUS_REV[r["狀態"]]||(STATUS[r["狀態"]]?r["狀態"]:(emp?"in_use":"available"));
@@ -929,7 +1106,10 @@ function importCSV(kind){
         return {tag:r["資產編號"],name:r["名稱"]||r["資產編號"],cat:r["類別"]||"其他",brand:r["品牌"]||"",model:r["型號"]||"",serial:r["序號"]||"",os:r["作業系統"]||"",status,
           holder_id:emp?emp.id:null,due_date:status==="borrowed"?due:null,location:r["存放位置"]||"",purchase_date:dt(r["購入日期"]||""),warranty_end:dt(r["保固到期"]||""),
           cost:r["購入金額"]?(Number(r["購入金額"].replace(/[^\d.]/g,""))||null):null,note:r["備註"]||"",
-          ...(hasSince?{assigned_date:emp?dt(r["領用日"]||""):null}:{})}; });
+          ...(hasSince?{assigned_date:emp?dt(r["領用日"]||""):null}:{}),
+          ...(has("供應商")?{vendor:r["供應商"]||""}:{}), ...(has("採購人")?{purchaser:r["採購人"]||""}:{}), ...(has("發票號碼")?{invoice_no:r["發票號碼"]||""}:{}),
+          ...(has("耐用年數")?{life_years:(Number(r["耐用年數"])>0?Number(r["耐用年數"]):null)}:{}),
+          ...(has("預估殘值")?{salvage:(r["預估殘值"]!==""&&!isNaN(Number(r["預估殘值"].replace(/[^\d.]/g,"")))&&r["預估殘值"].replace(/[^\d.]/g,"")!==""?Number(r["預估殘值"].replace(/[^\d.]/g,"")):null)}:{})}; });
     } else {
       recs=rows.map(r=>({emp_no:r["員工編號"],name:r["姓名"]||r["員工編號"],dept:r["部門"]||"",email:(r["Email"]||"").toLowerCase()||null,slack_id:r["Slack ID"]||"",active:r["在職"]?!/否|離職|no|false/i.test(r["在職"]):true}));
     }
@@ -968,6 +1148,7 @@ document.addEventListener("click", async e=>{
   const ch=e.target.closest("[data-status]"); if(ch){ S.f.status=ch.dataset.status; S.f.overdue=false; updAssets(); return; }
   const od=e.target.closest("[data-overdue]"); if(od){ S.f.overdue=!S.f.overdue; S.f.status=""; updAssets(); return; }
   const sc=e.target.closest("[data-sost]"); if(sc){ S.sf.st=sc.dataset.sost; updSos(); return; }
+  const rc=e.target.closest("[data-rst]"); if(rc){ S.rf.st=rc.dataset.rst; updRepairs(); return; }
   const b=e.target.closest("[data-act]"); if(!b) return;
   const id=b.dataset.id;
   try{ switch(b.dataset.act){
@@ -1001,6 +1182,12 @@ document.addEventListener("click", async e=>{
     case "exportEmps": exportEmps(); break;
     case "exportSos": exportSos(); break;
     case "backup": backup(); break;
+    case "newRepair": openRepair(null,id); break;
+    case "openRepair": openRepair(id); break;
+    case "pickRepairAsset": pickRepairAsset(); break;
+    case "exportRepairs": exportRepairs(); break;
+    case "exportValues": exportValues(); break;
+    case "saveDep": saveDep(); break;
     case "importAssets": importCSV("assets"); break;
     case "importEmps": importCSV("emps"); break;
     case "csvTemplate": csvTemplate(b.dataset.kind); break;
