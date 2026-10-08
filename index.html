@@ -97,7 +97,14 @@ textarea.in{resize:vertical;min-height:90px;line-height:1.6}
 .chip[aria-pressed="true"] b{color:var(--surface)}
 .chip:focus-visible{outline:2px solid var(--focus)}
 
-.tag{display:inline-block;font:600 15px/1 var(--f-code);letter-spacing:.04em;background:var(--tag);color:var(--tag-ink);padding:4px 7px 3px;border-radius:3px;white-space:nowrap}
+.tag{display:inline-block;font:600 15px/1 var(--f-code);letter-spacing:.04em;background:var(--surface-2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);padding:4px 7px 3px;border-radius:4px;white-space:nowrap}
+.ep{position:relative}
+.ep .ep-in{padding-right:32px}
+.ep-x{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--ink-2);cursor:pointer;font-size:13px;padding:4px 6px;border-radius:4px}
+.ep-x:hover{background:var(--surface-2);color:var(--ink)}
+.ep-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:6;background:var(--surface);box-shadow:var(--shadow);margin-top:0!important;max-height:280px}
+.ep-list button{font-size:14px;color:var(--ink)}
+.ep-list button[aria-selected="true"]{background:var(--steel-soft)}
 .st{display:inline-flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap}
 .st::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
 .st.available{color:var(--green)} .st.in_use{color:var(--steel)} .st.repair{color:var(--amber)} .st.lost{color:var(--red)} .st.retired{color:var(--ink-2)}
@@ -492,6 +499,56 @@ function renderCatChips(cats){
 let drawerAsset=null;
 function openDrawer(title, body, foot){ $("#drTitle").innerHTML=title; $("#drBody").innerHTML=body; $("#drFoot").innerHTML=foot||""; $("#drawer").classList.add("on"); $("#scrim").classList.add("on"); $("#drBody").scrollTop=0; }
 function closeDrawer(){ $("#drawer").classList.remove("on"); $("#scrim").classList.remove("on"); drawerAsset=null; }
+/* ---------- 可輸入搜尋的員工選擇欄 ---------- */
+const empLabel = e => e ? `${e.emp_no} ${e.name}${e.dept?"・"+e.dept:""}` : "";
+function empPicker(name, sel, placeholder){
+  return `<div class="ep" data-ep="${name}"><input type="hidden" name="${name}" value="${esc(sel||"")}">
+    <input class="in ep-in" type="text" autocomplete="off" spellcheck="false" value="${esc(empLabel(S.emps.get(sel)))}" placeholder="${esc(placeholder||"輸入姓名、員工編號或部門搜尋")}" role="combobox" aria-expanded="false" aria-autocomplete="list">
+    <button type="button" class="ep-x ${sel?"":"hide"}" aria-label="清除">✕</button><div class="picks ep-list hide" role="listbox"></div></div>`;
+}
+function setEmpPick(box, id){
+  if(!box) return;
+  const h=box.querySelector('input[type=hidden]'), changed=h.value!==(id||"");
+  h.value=id||""; box.querySelector(".ep-in").value=empLabel(S.emps.get(id)); box.querySelector(".ep-x").classList.toggle("hide",!id);
+  if(changed) h.dispatchEvent(new Event("change",{bubbles:true}));
+}
+function bindEmpPickers(root){
+  root.querySelectorAll(".ep").forEach(box=>{
+    const inp=box.querySelector(".ep-in"), list=box.querySelector(".ep-list"), h=box.querySelector("input[type=hidden]");
+    let hits=[], idx=-1;
+    const isOpen=()=>!list.classList.contains("hide");
+    const close=()=>{ list.classList.add("hide"); inp.setAttribute("aria-expanded","false"); };
+    const draw=()=>{
+      list.innerHTML = hits.length ? hits.map((e,i)=>`<button type="button" role="option" data-i="${i}" aria-selected="${i===idx}"><span class="num">${esc(e.emp_no)}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.name)}<span class="muted small">${e.dept?"　"+esc(e.dept):""}</span></span></button>`).join("")
+                                   : `<div class="small muted" style="padding:8px 10px">找不到符合的員工</div>`;
+      list.classList.remove("hide"); inp.setAttribute("aria-expanded","true");
+      const cur=list.querySelector('[aria-selected="true"]'); if(cur) cur.scrollIntoView({block:"nearest"});
+    };
+    const search=()=>{
+      const cur=S.emps.get(h.value), ws=(cur&&inp.value===empLabel(cur)) ? [] : inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      hits=[...S.emps.values()].filter(e=>e.active||e.id===h.value)
+        .filter(e=>{ const t=[e.emp_no,e.name,e.dept,e.email].join(" ").toLowerCase(); return ws.every(w=>t.includes(w)); })
+        .sort(byEmpNo).slice(0,80);
+      idx=hits.length?0:-1; draw();
+    };
+    inp.addEventListener("focus",()=>{ inp.select(); search(); });
+    inp.addEventListener("input",search);
+    inp.addEventListener("keydown",e=>{
+      if(e.key==="ArrowDown"||e.key==="ArrowUp"){ e.preventDefault(); if(!isOpen()) search(); else if(hits.length){ idx=(idx+(e.key==="ArrowDown"?1:-1)+hits.length)%hits.length; draw(); } }
+      else if(e.key==="Enter"){ e.preventDefault(); if(isOpen()&&hits[idx]){ setEmpPick(box,hits[idx].id); close(); } }
+      else if(e.key==="Escape"&&isOpen()){ e.stopPropagation(); close(); inp.value=empLabel(S.emps.get(h.value)); }
+    });
+    list.addEventListener("mousedown",e=>{ e.preventDefault(); const b=e.target.closest("[data-i]"); if(b){ setEmpPick(box,hits[+b.dataset.i].id); close(); inp.blur(); } });
+    inp.addEventListener("blur",()=>{
+      const typed=inp.value.trim(), cur=S.emps.get(h.value);
+      if(!typed) setEmpPick(box,"");
+      else if(!(cur&&inp.value===empLabel(cur)) && hits.length===1) setEmpPick(box,hits[0].id);   // 只剩一個符合的人，直接選他
+      else inp.value=empLabel(cur);
+      close();
+    });
+    box.querySelector(".ep-x").addEventListener("click",()=>{ setEmpPick(box,""); inp.focus(); });
+  });
+}
 function empOptions(sel){
   const arr=Array.from(S.emps.values()).filter(e=>e.active||e.id===sel);
   return `<option value="">（無）</option>`+arr.map(e=>`<option value="${esc(e.id)}" ${e.id===sel?"selected":""}>${esc(e.emp_no)} ${esc(e.name)}${e.dept?"・"+esc(e.dept):""}</option>`).join("");
@@ -521,7 +578,7 @@ async function openAsset(id){
     <label>作業系統／版本<input class="in" name="os" value="${esc(v.os)}" placeholder="例：iOS 18.2、Android 15"></label>
     <label>存放位置<input class="in" name="location" value="${esc(v.location)}" placeholder="例：台北 8F"></label>
     <label>狀態<select class="in" name="status">${Object.entries(STATUS).map(([k,l])=>`<option value="${k}" ${v.status===k?"selected":""}>${l}</option>`).join("")}</select></label>
-    <label>保管人／借用人<select class="in" name="holder_id">${empOptions(v.holder_id)}</select></label>
+    <label>保管人／借用人${empPicker("holder_id",v.holder_id)}</label>
     <label id="assignWrap" class="${v.holder_id?"":"hide"}">領用日<input class="in" type="date" name="assigned_date" value="${esc(v.assigned_date)}"></label>
     <label id="dueWrap" class="${v.status==="borrowed"?"":"hide"}"><span class="req">預計歸還日</span><input class="in" type="date" name="due_date" value="${esc(v.due_date)}"></label>
     <label>購入日期<input class="in" type="date" name="purchase_date" value="${esc(v.purchase_date)}"></label>
@@ -538,10 +595,11 @@ async function openAsset(id){
   ${ev.length?`<div class="sec">異動紀錄</div><div class="hist">${ev.map(h=>`<div><span class="num">${fmtDT(h.at)}</span>　${esc(h.action)}${h.by_email?` <span class="muted">（${esc(h.by_email)}）</span>`:""}</div>`).join("")}</div>`:""}`;
   const foot = isAdmin() ? `<button class="btn primary" data-act="saveAsset" data-id="${esc(id||"")}">${a?"儲存變更":"新增資產"}</button>${a?`<button class="btn danger" data-act="delAsset" data-id="${esc(id)}" style="margin-left:auto">刪除</button>`:""}` : "";
   openDrawer(a?`<span class="tag">${esc(a.tag)}</span> ${esc(a.name)}`:"新增資產", body, foot);
+  bindEmpPickers($("#af"));
   $("#af").addEventListener("change", e=>{
     const f=e.currentTarget;
     if(e.target.name==="holder_id" && e.target.value && f.status.value==="available") f.status.value = f.cat.value==="測試機" ? "borrowed" : "in_use";
-    if(e.target.name==="status" && e.target.value==="available") f.holder_id.value="";
+    if(e.target.name==="status" && e.target.value==="available") setEmpPick(f.querySelector('.ep[data-ep="holder_id"]'),"");
     if(e.target.name==="holder_id" && e.target.value){ f.assigned_date.value=todayStr(); }
     if(f.status.value==="borrowed" && !f.due_date.value){ const d=new Date(Date.now()+7*864e5); f.due_date.value=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
     $("#dueWrap").classList.toggle("hide", f.status.value!=="borrowed");
@@ -651,7 +709,7 @@ async function openRepair(rid, assetId){
   modal(`<h2>${r?"維修紀錄":"新增報修"}</h2><p class="small muted" style="margin:0 0 12px"><span class="tag">${esc(a.tag)}</span> ${esc(a.name)}${r?"":"。送出後設備狀態會改為「維修中」，完成時自動恢復。"}</p>
   <form class="form" id="rpf" autocomplete="off"><fieldset style="display:contents" ${A?"":"disabled"}>
    <label><span class="req">報修日</span><input class="in" type="date" name="reported_at" required value="${esc(v.reported_at)}"></label>
-   <label>報修人<select class="in" name="reporter_id">${empOptions(v.reporter_id)}</select></label>
+   <label>報修人${empPicker("reporter_id",v.reporter_id)}</label>
    <label class="full"><span class="req">問題描述</span><textarea class="in" name="issue" rows="2" required placeholder="例：螢幕閃爍、電池膨脹、無法開機">${esc(v.issue)}</textarea></label>
    <label>維修廠商<input class="in" name="vendor" value="${esc(v.vendor)}" placeholder="例：Apple 授權維修中心"></label>
    <label>送修日<input class="in" type="date" name="sent_at" value="${esc(v.sent_at)}"></label>
@@ -663,7 +721,7 @@ async function openRepair(rid, assetId){
   </fieldset></form>
   <p class="small" id="rHint" style="margin:10px 0 0;color:var(--amber)"></p>
   <div class="row" style="margin-top:16px;justify-content:flex-end">${A&&r?`<button class="btn danger" id="rDel" style="margin-right:auto">刪除</button>`:""}<button class="btn" data-close>${A?"取消":"關閉"}</button>${A?`<button class="btn primary" id="rGo">${r?"儲存":"送出報修"}</button>`:""}</div>`);
-  const f=$("#rpf");
+  const f=$("#rpf"); bindEmpPickers(f);
   f.addEventListener("change",e=>{ if(e.target.name!=="result") return;
     if(f.result.value!=="pending"&&!f.done_at.value) f.done_at.value=todayStr();
     $("#rHint").textContent = f.result.value==="scrapped"&&!finished ? "儲存後，設備狀態會改為「已報廢」。" : f.result.value!=="pending"&&!finished ? "儲存後，設備會恢復成送修前的狀態與保管人。" : ""; });
