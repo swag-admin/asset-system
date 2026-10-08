@@ -290,7 +290,7 @@ const SO_COLS = "id,no,type,employee_id,employee_name,emp_no,dept,signer_email,i
 const S = {
   sb:null, email:"", role:null, me:null, cfg:{company:"",app_url:"",categories:[],terms:""},
   emps:new Map(), counts:new Map(), view:null, list:null, pendingTotal:0,
-  f:{q:"",status:"",cat:"",holder:"",sort:"tag",overdue:false}, ef:{q:""}, sf:{q:"",st:"pending"}, rf:{q:"",st:"pending"}
+  f:{q:"",status:"",cat:"",holder:"",sort:"tag",overdue:false}, ef:{q:"",sort:(()=>{try{return localStorage.getItem("empSort")||"no"}catch{return "no"}})(),dept:""}, sf:{q:"",st:"pending"}, rf:{q:"",st:"pending"}
 };
 const isAdmin = () => S.role === "admin";
 const isStaff = () => S.role === "admin" || S.role === "viewer";
@@ -736,7 +736,9 @@ function updRepairs(keep){
 function viewEmps(){
   setHead("員工","", isAdmin()?`<button class="btn" data-act="exportEmps">匯出 CSV</button><button class="btn" data-act="importEmps">匯入 CSV</button><button class="btn" data-act="bulkInventory">產生全員盤點單</button><button class="btn primary" data-act="newEmp">新增員工</button>`:`<button class="btn" data-act="exportEmps">匯出 CSV</button>`);
   const c=$("#content"); c.classList.add("fixed");
-  c.innerHTML=`<div class="toolbar"><label class="search"><span aria-hidden="true" class="muted">⌕</span><input id="eq" placeholder="搜尋姓名、員工編號、部門、Email…" value="${esc(S.ef.q)}" aria-label="搜尋員工"></label></div><div id="elist" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>`;
+  c.innerHTML=`<div class="toolbar"><label class="search"><span aria-hidden="true" class="muted">⌕</span><input id="eq" placeholder="搜尋姓名、員工編號、部門、Email…" value="${esc(S.ef.q)}" aria-label="搜尋員工"></label>
+    <select class="in" id="edept" aria-label="依部門篩選">${deptOptions()}</select>
+    <select class="in" id="esort" aria-label="排序"><option value="no">依員工編號（TW 優先）</option><option value="dept">依部門</option><option value="name">依姓名</option></select></div><div id="elist" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>`;
   S.list=new VList($("#elist"),{grid:"g-emps", onClick:openEmp,
     head:`<span>員工編號</span><span>姓名</span><span class="mh">部門</span><span>名下資產</span><span class="mh">線上簽收</span><span class="mh">待簽</span>`,
     row:e=>{ const c=S.counts.get(e.id)||{}; return `<span class="num">${esc(e.emp_no)}</span><span>${esc(e.name)}${e.active?"":' <span class="muted small">（已離職）</span>'}${mobile.matches?`<span class="l2">${esc(e.dept)}</span>`:""}</span><span class="mh muted">${esc(e.dept)}</span><span class="num">${c.assets||0} 件</span><span class="mh small ${e.email?"":"muted"}">${e.email?"可登入簽名":"僅紙本"}</span><span class="mh">${c.pending?`<span class="stamp pending">${c.pending} 張</span>`:""}</span>`; },
@@ -744,13 +746,32 @@ function viewEmps(){
     foot:n=>`<span>顯示 ${n} ／ 共 ${S.emps.size} 位</span>`
   });
   $("#eq").addEventListener("input",debounce(e=>{S.ef.q=e.target.value.trim().toLowerCase(); updEmps();},120));
+  $("#esort").value=S.ef.sort;
+  $("#esort").addEventListener("change",e=>{ S.ef.sort=e.target.value; try{localStorage.setItem("empSort",S.ef.sort)}catch{} updEmps(); });
+  $("#edept").addEventListener("change",e=>{ S.ef.dept=e.target.value; updEmps(); });
   updEmps();
+}
+// 員工編號排序：TW 開頭的排最前面，其他前綴依字母順序，同前綴依數字大小
+const empPrefix = e => { const m=/^[A-Za-z]+/.exec(String(e.emp_no||"")); return m?m[0].toUpperCase():""; };
+const byEmpNo = (a,b) => { const pa=empPrefix(a), pb=empPrefix(b);
+  return (pa!=="TW")-(pb!=="TW") || pa.localeCompare(pb) || String(a.emp_no).localeCompare(String(b.emp_no),undefined,{numeric:true}); };
+const EMP_SORT = {
+  no: byEmpNo,
+  dept: (a,b) => (!a.dept)-(!b.dept) || String(a.dept).localeCompare(String(b.dept),"en") || byEmpNo(a,b),
+  name: (a,b) => String(a.name).localeCompare(String(b.name),"zh-Hant") || byEmpNo(a,b)
+};
+function deptOptions(){
+  const n=new Map(); for(const e of S.emps.values()){ const d=e.dept||""; n.set(d,(n.get(d)||0)+1); }
+  const ds=[...n.keys()].filter(Boolean).sort((a,b)=>a.localeCompare(b,"en"));
+  return `<option value="">全部部門</option>`+ds.map(d=>`<option value="${esc(d)}" ${S.ef.dept===d?"selected":""}>${esc(d)}（${n.get(d)}）</option>`).join("")
+    +(n.get("")?`<option value="__none__" ${S.ef.dept==="__none__"?"selected":""}>未填部門（${n.get("")}）</option>`:"");
 }
 function updEmps(keep){
   if(S.view!=="emps"||!S.list) return;
   const qq=S.ef.q, out=[];
-  for(const e of S.emps.values()){ if(qq && ![e.name,e.emp_no,e.dept,e.email].join(" ").toLowerCase().includes(qq)) continue; out.push(e); }
-  out.sort((a,b)=>(!a.active)-(!b.active) || String(a.emp_no).localeCompare(String(b.emp_no),undefined,{numeric:true}));
+  for(const e of S.emps.values()){ if(qq && ![e.name,e.emp_no,e.dept,e.email].join(" ").toLowerCase().includes(qq)) continue;
+    if(S.ef.dept && (S.ef.dept==="__none__"?(e.dept||""):e.dept)!==(S.ef.dept==="__none__"?"":S.ef.dept)) continue; out.push(e); }
+  out.sort((a,b)=>(!a.active)-(!b.active) || (EMP_SORT[S.ef.sort]||byEmpNo)(a,b));
   $("#subtitle").textContent=`${S.emps.size} 位員工`;
   S.list.set(out,keep);
 }
