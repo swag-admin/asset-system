@@ -421,7 +421,9 @@ async function refreshCounts(){
 }
 async function loadEmps(){
   if(!isStaff()) return;
-  const rows=await fetchAll(()=>S.sb.from("employees").select("id,emp_no,name,dept,email,slack_id,active").order("emp_no"));
+  let rows;
+  try{ rows=await fetchAll(()=>S.sb.from("employees").select("id,emp_no,name,dept,email,slack_id,active,hire_date").order("emp_no")); S.hasHire=true; }
+  catch{ rows=await fetchAll(()=>S.sb.from("employees").select("id,emp_no,name,dept,email,slack_id,active").order("emp_no")); S.hasHire=false; }   // 尚未執行 update-2026-10d
   S.emps=new Map(rows.map(e=>[e.id,e]));
   const cs=await q(S.sb.rpc("employee_counts")); S.counts=new Map(cs.map(c=>[c.employee_id,c]));
 }
@@ -854,6 +856,7 @@ async function openEmp(id){
     <label><span class="req">員工編號</span><input class="in" name="emp_no" required value="${esc(v.emp_no)}"></label>
     <label><span class="req">姓名</span><input class="in" name="name" required value="${esc(v.name)}"></label>
     <label>部門<input class="in" name="dept" value="${esc(v.dept)}"></label>
+    ${S.hasHire?`<label>到職日<input class="in" type="date" name="hire_date" value="${esc(v.hire_date)}"></label>`:""}
     <label>公司 Email<input class="in" type="email" name="email" value="${esc(v.email)}" placeholder="name@company.com"></label>
     <label>Slack 成員 ID<input class="in" name="slack_id" value="${esc(v.slack_id)}" placeholder="U 開頭，例：U04ABCD123（選填，供日後自動通知使用）"></label>
     <label>在職狀態<select class="in" name="active"><option value="1" ${v.active?"selected":""}>在職</option><option value="0" ${v.active?"":"selected"}>已離職</option></select></label>
@@ -876,6 +879,7 @@ async function saveEmp(id){
   const f=$("#ef"); if(!f.reportValidity()) return;
   const fd=Object.fromEntries(new FormData(f).entries()); for(const k in fd) fd[k]=String(fd[k]).trim();
   const data={emp_no:fd.emp_no,name:fd.name,dept:fd.dept,email:fd.email?fd.email.toLowerCase():null,slack_id:fd.slack_id,active:fd.active==="1"};
+  if(S.hasHire) data.hire_date=fd.hire_date||null;
   await run(()=> id ? q(S.sb.from("employees").update(data).eq("id",id)) : q(S.sb.from("employees").insert(data)), id?"已儲存員工資料":"已新增員工");
   closeDrawer(); await loadEmps(); updEmps(true);
 }
@@ -984,7 +988,8 @@ async function copyAllSlack(){
   copyText(rows.map(slackMsg).join("\n\n———\n\n"),`已複製 ${rows.length} 則通知訊息`);
 }
 function formHTML(s){
-  const st=soStatus(s), co=esc(S.cfg.company||""), hasDue=s.items.some(i=>i.due), hasSince=s.items.some(i=>i.since);
+  const st=soStatus(s), co=esc(S.cfg.company||""), hasDue=s.items.some(i=>i.due), hasSince=true;   // 領用日欄固定顯示
+  const emp=(S.emps&&S.emps.get(s.employee_id))||(S.me&&S.me.id===s.employee_id?S.me:{}), hire=emp.hire_date?fmtD(emp.hire_date):"";
   return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${esc(SO_TYPE[s.type])} ${esc(s.no)}</title><style>
 @page{size:A4 landscape;margin:12mm}body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;color:#111;font-size:11.5pt;line-height:1.5;max-width:1060px;margin:16px auto;padding:0 16px}
 h1{text-align:center;font-size:20pt;margin:0 0 4px;letter-spacing:.2em}.co{text-align:center;font-size:13pt;margin-bottom:14px}
@@ -998,9 +1003,9 @@ table{width:100%;border-collapse:collapse;margin:8px 0 14px}th,td{border:1px sol
 <div class="noprint" style="text-align:right;margin-bottom:10px"><button onclick="print()" style="font-size:14px;padding:6px 14px">列印</button></div>
 ${co?`<div class="co">${co}</div>`:""}<h1>${esc(SO_TYPE[s.type])}</h1>
 <div class="meta"><span>單號：${esc(s.no)}</span><span>製表日期：${fmtD(s.created_at)}</span></div>
-<table><tr><th style="width:16%">員工編號</th><td>${esc(s.emp_no)}</td><th style="width:16%">姓名</th><td>${esc(s.employee_name)}</td></tr><tr><th>部門</th><td colspan="3">${esc(s.dept)}</td></tr></table>
-<table><thead><tr><th style="width:4%">序</th><th>資產編號</th><th>名稱</th><th>品牌／型號／系統</th><th>序號</th>${hasSince?'<th>領用日</th>':""}${hasDue?'<th>預計歸還</th>':""}</tr></thead><tbody>
-${s.items.map((it,i)=>`<tr><td class="nw">${i+1}</td><td class="nw">${esc(it.tag)}</td><td class="nw">${esc(it.name)}</td><td>${esc(it.bm)}</td><td class="nw">${esc(it.serial)}</td>${hasSince?`<td class="nw">${esc(it.since||"")}</td>`:""}${hasDue?`<td class="nw">${esc(it.due||"")}</td>`:""}</tr>`).join("")}</tbody></table>
+<table><tr><th style="width:16%">員工編號</th><td>${esc(s.emp_no)}</td><th style="width:16%">姓名</th><td>${esc(s.employee_name)}</td></tr><tr><th>部門</th><td>${esc(s.dept)}</td><th>到職日</th><td>${esc(hire)}</td></tr></table>
+<table><thead><tr><th style="width:4%">序</th><th>資產編號</th><th>名稱</th><th>品牌／型號／系統</th>${hasSince?'<th>領用日</th>':""}${hasDue?'<th>預計歸還</th>':""}</tr></thead><tbody>
+${s.items.map((it,i)=>`<tr><td class="nw">${i+1}</td><td class="nw">${esc(it.tag)}</td><td class="nw">${esc(it.name)}</td><td>${esc(it.bm)}</td>${hasSince?`<td class="nw">${esc(it.since||"")}</td>`:""}${hasDue?`<td class="nw">${esc(it.due||"")}</td>`:""}</tr>`).join("")}</tbody></table>
 <div class="terms">${esc(S.cfg.terms)}</div>
 <p style="font-size:11pt">本人已確認上列設備之品項、數量與狀況無誤，並同意遵守上述保管規範${s.type==="borrow"?"，且將於預計歸還日前歸還":""}。</p>
 <div class="sign"><div class="box"><div class="lab">員工簽名：</div><div class="line">${sigSvg(s.signature)}</div>
@@ -1238,7 +1243,7 @@ function delRole(email){ confirmBox(`移除 ${email}？`,"移除後他將失去�
 
 /* ================= CSV / backup ================= */
 const A_CSV=[["資產編號","tag"],["名稱","name"],["類別","cat"],["品牌","brand"],["型號","model"],["序號","serial"],["作業系統","os"],["狀態","_status"],["預計歸還","due_date"],["保管人員工編號","_empNo"],["保管人","holder_name"],["原保管人（遺失／報廢）","_last"],["領用日","assigned_date"],["存放位置","location"],["購入日期","purchase_date"],["保固到期","warranty_end"],["購入金額","cost"],["供應商","vendor"],["採購人","purchaser"],["發票號碼","invoice_no"],["耐用年數","life_years"],["預估殘值","salvage"],["備註","note"]];
-const E_CSV=[["員工編號","emp_no"],["姓名","name"],["部門","dept"],["Email","email"],["Slack ID","slack_id"],["在職","_active"]];
+const E_CSV=[["員工編號","emp_no"],["姓名","name"],["部門","dept"],["到職日","hire_date"],["Email","email"],["Slack ID","slack_id"],["在職","_active"]];
 const cell=v=>{ v=String(v??""); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v; };
 const toCSV=(cols,rows)=>"\ufeff"+[cols.map(c=>c[0]).join(","),...rows.map(r=>cols.map(c=>cell(r[c[1]])).join(","))].join("\n");
 async function exportAssets(){
@@ -1279,7 +1284,7 @@ function csvTemplate(kind){
     const ex2={tag:"IT-0002",name:"iPhone 15 Pro",cat:"測試機",brand:"Apple",model:"A3102",serial:"",os:"iOS 18.2",_status:"借用中",due_date:"2026-10-31",_empNo:"TW0001",assigned_date:"2026-09-28",location:"台北 8F",purchase_date:"",warranty_end:"",cost:"",note:""};
     download("資產匯入範本.csv", toCSV(cols,[ex,ex2]), "text/csv;charset=utf-8");
   } else {
-    download("員工匯入範本.csv", toCSV(E_CSV,[{emp_no:"TW0001",name:"王小明",dept:"行政部",email:"wang@swag.live",slack_id:"",_active:"是"},{emp_no:"TW0002",name:"陳怡君",dept:"Customer Success",email:"",slack_id:"",_active:"是"}]), "text/csv;charset=utf-8");
+    download("員工匯入範本.csv", toCSV(E_CSV,[{emp_no:"TW0001",name:"王小明",dept:"行政部",hire_date:"2024-03-01",email:"wang@swag.live",slack_id:"",_active:"是"},{emp_no:"TW0002",name:"陳怡君",dept:"Customer Success",email:"",slack_id:"",_active:"是"}]), "text/csv;charset=utf-8");
   }
 }
 const STATUS_REV=Object.fromEntries(Object.entries(STATUS).map(([k,v])=>[v,k]));
@@ -1313,7 +1318,8 @@ function importCSV(kind){
           ...(has("耐用年數")?{life_years:(Number(r["耐用年數"])>0?Number(r["耐用年數"]):null)}:{}),
           ...(has("預估殘值")?{salvage:(r["預估殘值"]!==""&&!isNaN(Number(r["預估殘值"].replace(/[^\d.]/g,"")))&&r["預估殘值"].replace(/[^\d.]/g,"")!==""?Number(r["預估殘值"].replace(/[^\d.]/g,"")):null)}:{})}; });
     } else {
-      recs=rows.map(r=>({emp_no:r["員工編號"],name:r["姓名"]||r["員工編號"],dept:r["部門"]||"",email:(r["Email"]||"").toLowerCase()||null,slack_id:r["Slack ID"]||"",active:r["在職"]?!/否|離職|no|false/i.test(r["在職"]):true}));
+      recs=rows.map(r=>({emp_no:r["員工編號"],name:r["姓名"]||r["員工編號"],dept:r["部門"]||"",email:(r["Email"]||"").toLowerCase()||null,slack_id:r["Slack ID"]||"",active:r["在職"]?!/否|離職|no|false/i.test(r["在職"]):true,
+        ...(S.hasHire&&rows.length&&Object.prototype.hasOwnProperty.call(rows[0],"到職日")?{hire_date:dt(String(r["到職日"]||"").trim())}:{})}));
     }
     let done=0, fail=null;
     for(let i=0;i<recs.length;i+=500){
