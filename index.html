@@ -951,7 +951,8 @@ let soCache=null;
 async function openSo(id){
   openDrawer("","<div class='loading'>載入中…</div>","");
   let s; try{ s=await q(S.sb.from("signoffs").select("*").eq("id",id).single()); }catch(e){ toast(dbErr(e),"err"); closeDrawer(); return; }
-  soCache=s; const st=soStatus(s);
+  soCache=s; const st=soStatus(s), done=st.k==="signed"||st.k==="paper";
+  const ar=done ? await S.sb.from("signoff_archives").select("*").eq("signoff_id",id).maybeSingle() : {data:null,error:null};
   const body=`<div class="row" style="justify-content:space-between;align-items:flex-start"><dl class="kv">
     <dt>類型</dt><dd>${SO_TYPE[s.type]}</dd><dt>員工</dt><dd>${esc(s.employee_name)}（${esc(s.emp_no)}）${esc(s.dept)}</dd>
     <dt>建立</dt><dd class="num">${fmtDT(s.created_at)}</dd><dt>簽收方式</dt><dd>${s.signer_email?"線上簽名":"紙本簽名"}</dd>
@@ -960,6 +961,7 @@ async function openSo(id){
     <div class="sec">設備明細（${s.items.length} 項）</div>
     <div class="list">${s.items.map((it,i)=>`<div class="li"><span class="num muted">${i+1}</span><span class="tag">${esc(it.tag)}</span><span class="grow">${esc(it.name)}<span class="muted small"> ${esc(it.bm)}${it.since?`・${esc(it.since.replace(/-/g,"/"))} 領用`:""}</span></span>${it.due?`<span class="due">應還 ${esc(it.due)}</span>`:""}</div>`).join("")}</div>
     ${s.signature?`<div class="sec">員工簽名</div><div class="sigimg">${sigSvg(s.signature)}</div>`:""}
+    ${done?`<div class="sec">PDF 存檔</div>${archiveHTML(s,ar.data,ar.error)}`:""}
     ${st.k==="pending"&&s.signer_email?`<div class="sec">通知員工簽收</div><p class="small muted">複製下方訊息貼到 Slack 私訊給員工，員工點連結登入即可線上簽名。</p><textarea class="in" readonly rows="6">${esc(slackMsg(s))}</textarea>`:""}`;
   const A=isAdmin();
   const foot=`<button class="btn primary" data-act="dlSo">下載簽收單</button><button class="btn" data-act="printSo">列印</button>
@@ -973,7 +975,7 @@ function appLink(){ return S.cfg.app_url || (location.origin+location.pathname);
 function slackMsg(s){
   // 手動貼到 Slack 時 <@ID> 不會變成標記，所以直接用姓名開頭（私訊本人即可收到通知）
   const due=s.items.map(it=>it.due).filter(Boolean).sort()[0];
-  return `${s.employee_name} 你好，你有一張設備簽收單（共 ${s.items.length} 項設備）${due?`，借用設備請於 ${due} 前歸還`:""}，請確認設備並線上簽名：\n${appLink()}`;
+  return `${s.employee_name} 你好，你有一張設備簽收單（共 ${s.items.length} 項設備）${due?`，借用設備請於 ${due} 前歸還`:""}，請用公司 Email 帳號登入，確認設備並線上簽名：\n${appLink()}`;
 }
 async function copyText(t,ok){ try{ await navigator.clipboard.writeText(t); toast(ok||"已複製"); }catch{ const ta=document.createElement("textarea"); ta.value=t; document.body.append(ta); ta.select(); try{ document.execCommand("copy"); toast(ok||"已複製"); }catch{ toast("無法自動複製，請手動選取文字","err"); } ta.remove(); } }
 async function copyAllSlack(){
@@ -984,20 +986,20 @@ async function copyAllSlack(){
 function formHTML(s){
   const st=soStatus(s), co=esc(S.cfg.company||""), hasDue=s.items.some(i=>i.due), hasSince=s.items.some(i=>i.since);
   return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${esc(SO_TYPE[s.type])} ${esc(s.no)}</title><style>
-@page{size:A4;margin:16mm}body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;color:#111;font-size:12.5pt;line-height:1.6;max-width:760px;margin:24px auto;padding:0 16px}
+@page{size:A4 landscape;margin:12mm}body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;color:#111;font-size:11.5pt;line-height:1.5;max-width:1060px;margin:16px auto;padding:0 16px}
 h1{text-align:center;font-size:20pt;margin:0 0 4px;letter-spacing:.2em}.co{text-align:center;font-size:13pt;margin-bottom:14px}
 .meta{display:flex;justify-content:space-between;font-size:11pt;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:10px}
-table{width:100%;border-collapse:collapse;margin:8px 0 14px}th,td{border:1px solid #444;padding:6px 8px;text-align:left;font-size:11pt}th{background:#eee}
-.terms{white-space:pre-wrap;font-size:10.5pt;border:1px solid #444;padding:10px 12px}
-.sign{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px}.box{border-top:1px solid #111;padding-top:6px;min-height:110px;position:relative}
+table{width:100%;border-collapse:collapse;margin:8px 0 14px}th,td{border:1px solid #444;padding:4px 7px;text-align:left;font-size:10.5pt}th{background:#eee;white-space:nowrap}.nw{white-space:nowrap}
+.terms{white-space:pre-wrap;font-size:10pt;line-height:1.5;border:1px solid #444;padding:8px 12px}
+.sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:14px}.box{border-top:1px solid #111;padding-top:6px;min-height:96px;position:relative}
 .box svg{width:240px;height:auto;display:block}.seal{position:absolute;right:6px;top:-4px;width:84px;height:84px;border:3px solid #c0392b;color:#c0392b;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;transform:rotate(-12deg);font-size:12pt}
 .seal small{font-size:9pt;font-weight:600}.foot{margin-top:18px;font-size:9.5pt;color:#555}@media print{.noprint{display:none}}</style></head><body>
 <div class="noprint" style="text-align:right;margin-bottom:10px"><button onclick="print()" style="font-size:14px;padding:6px 14px">列印</button></div>
 ${co?`<div class="co">${co}</div>`:""}<h1>${esc(SO_TYPE[s.type])}</h1>
 <div class="meta"><span>單號：${esc(s.no)}</span><span>製表日期：${fmtD(s.created_at)}</span></div>
 <table><tr><th style="width:16%">員工編號</th><td>${esc(s.emp_no)}</td><th style="width:16%">姓名</th><td>${esc(s.employee_name)}</td></tr><tr><th>部門</th><td colspan="3">${esc(s.dept)}</td></tr></table>
-<table><thead><tr><th style="width:6%">序</th><th style="width:15%">資產編號</th><th>名稱</th><th style="width:22%">品牌／型號／系統</th><th style="width:17%">序號</th>${hasSince?'<th style="width:13%">領用日</th>':""}${hasDue?'<th style="width:13%">預計歸還</th>':""}</tr></thead><tbody>
-${s.items.map((it,i)=>`<tr><td>${i+1}</td><td>${esc(it.tag)}</td><td>${esc(it.name)}</td><td>${esc(it.bm)}</td><td>${esc(it.serial)}</td>${hasSince?`<td>${esc(it.since||"")}</td>`:""}${hasDue?`<td>${esc(it.due||"")}</td>`:""}</tr>`).join("")}</tbody></table>
+<table><thead><tr><th style="width:4%">序</th><th>資產編號</th><th>名稱</th><th>品牌／型號／系統</th><th>序號</th>${hasSince?'<th>領用日</th>':""}${hasDue?'<th>預計歸還</th>':""}</tr></thead><tbody>
+${s.items.map((it,i)=>`<tr><td class="nw">${i+1}</td><td class="nw">${esc(it.tag)}</td><td class="nw">${esc(it.name)}</td><td>${esc(it.bm)}</td><td class="nw">${esc(it.serial)}</td>${hasSince?`<td class="nw">${esc(it.since||"")}</td>`:""}${hasDue?`<td class="nw">${esc(it.due||"")}</td>`:""}</tr>`).join("")}</tbody></table>
 <div class="terms">${esc(S.cfg.terms)}</div>
 <p style="font-size:11pt">本人已確認上列設備之品項、數量與狀況無誤，並同意遵守上述保管規範${s.type==="borrow"?"，且將於預計歸還日前歸還":""}。</p>
 <div class="sign"><div class="box">員工簽名：${sigSvg(s.signature)}${st.at?`<div style="font-size:10pt">簽署時間：${fmtDT(st.at)}${st.k==="signed"?"（線上簽署）":""}</div>`:"<div style='font-size:10pt;margin-top:70px'>日期：　　　年　　月　　日</div>"}
@@ -1011,6 +1013,94 @@ function download(filename, data, type){
 async function soFull(id){ return soCache&&soCache.id===id ? soCache : await q(S.sb.from("signoffs").select("*").eq("id",id).single()); }
 function dlSo(s){ download(`${SO_SHORT[s.type]}簽收單_${s.no}_${s.employee_name}.html`, formHTML(s), "text/html;charset=utf-8"); }
 function printSo(s){ const w=window.open("","_blank"); if(!w){ toast("瀏覽器擋住了彈出視窗，請改用「下載簽收單」","err"); return; } w.document.write(formHTML(s)); w.document.close(); setTimeout(()=>w.print(),400); }
+
+
+/* ================= 簽收單 PDF 自動存檔 ================= */
+const ARCH_BUCKET = "signoff-archive";
+const ARCH_NEED_SQL = "需要先在 Supabase 執行 update-2026-10c-signoff-archive.sql 才能自動存檔。";
+let pdfLibs = null;
+const loadScript = src => new Promise((ok,no)=>{ const el=document.createElement("script"); el.src=src; el.onload=ok; el.onerror=()=>no(new Error("無法載入 "+src)); document.head.appendChild(el); });
+function ensurePdfLibs(){
+  return pdfLibs ||= Promise.all([
+    window.html2canvas ? 0 : loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"),
+    window.jspdf ? 0 : loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")
+  ]).catch(e=>{ pdfLibs=null; throw e; });
+}
+// 與資料庫 signoff_archive_path() 相同的規則：年-月（台灣時間）/單號_員工編號.pdf
+function archivePath(s){
+  const at=new Date(new Date(s.signed_at||s.paper_signed_at).getTime()+8*3600e3).toISOString().slice(0,7);
+  const emp=String(s.emp_no||"").replace(/[^A-Za-z0-9_-]/g,"");
+  return `${at}/${s.no}${emp?"_"+emp:""}.pdf`;
+}
+async function soPdf(s){
+  await ensurePdfLibs();
+  const ifr=document.createElement("iframe");
+  ifr.style.cssText="position:fixed;left:-10000px;top:0;width:1140px;height:900px;border:0";
+  document.body.appendChild(ifr);
+  try{
+    const d=ifr.contentDocument; d.open();
+    d.write(formHTML(s).replace("</style>",".noprint{display:none!important}html,body{margin:0;padding:0;background:#fff;max-width:none}#pdfroot{width:1060px;padding:24px 28px;background:#fff;box-sizing:content-box}</style>"));
+    d.close();
+    const root=d.createElement("div"); root.id="pdfroot"; while(d.body.firstChild) root.appendChild(d.body.firstChild); d.body.appendChild(root);
+    await new Promise(r=>setTimeout(r,200)); if(d.fonts&&d.fonts.ready) await d.fonts.ready;
+    const SC=2, top=root.getBoundingClientRect().top;
+    // 可以換頁的位置：每一列表格、每個區塊的底部（避免把一列切成兩半）
+    const cuts=[...root.querySelectorAll("tr,h1,.meta,.terms,p,.sign,.foot,.co")].map(el=>Math.round((el.getBoundingClientRect().bottom-top)*SC)).sort((a,b)=>a-b);
+    const cv=await window.html2canvas(root,{scale:SC,backgroundColor:"#ffffff",logging:false,windowWidth:1140});
+    const pdf=new window.jspdf.jsPDF({unit:"pt",format:"a4",orientation:"landscape",compress:true});
+    const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight(), m=20, iw=pw-m*2, k=iw/cv.width, pageH=Math.floor((ph-m*2)/k);
+    for(let y=0,i=0,h; y<cv.height-80; y+=h,i++){   // 最後剩不到一行的空白不另起一頁
+      h=Math.min(pageH,cv.height-y);
+      if(y+h<cv.height){ const best=cuts.filter(c=>c>y+pageH*0.5&&c<=y+pageH).pop(); if(best) h=best-y+2; }
+      const c=document.createElement("canvas"); c.width=cv.width; c.height=h;
+      c.getContext("2d").drawImage(cv,0,y,cv.width,h,0,0,cv.width,h);
+      if(i) pdf.addPage();
+      pdf.addImage(c.toDataURL("image/jpeg",0.92),"JPEG",m,m,iw,h*k);
+    }
+    pdf.setProperties({title:s.no, creator:"Asset System"});
+    return pdf.output("blob");
+  } finally { ifr.remove(); }
+}
+async function archiveSo(s,{overwrite=false}={}){
+  const path=archivePath(s), blob=await soPdf(s);
+  const up=await S.sb.storage.from(ARCH_BUCKET).upload(path,blob,{contentType:"application/pdf",upsert:overwrite,cacheControl:"3600"});
+  if(up.error && !/exist|duplicate/i.test(up.error.message||"")) throw up.error;   // 已存在＝之前上傳過，直接登記即可
+  await q(S.sb.rpc("record_signoff_archive",{p_id:s.id,p_bytes:blob.size}));
+  return path;
+}
+async function autoArchive(id){   // 簽收完成後在背景存檔；失敗時，管理員下次登入會自動補存
+  try{ const s=await q(S.sb.from("signoffs").select("*").eq("id",id).single()); await archiveSo(s); }
+  catch(e){ console.warn("簽收單存檔失敗，稍後由管理員補存：",e); }
+}
+async function catchUpArchives(){
+  if(S.archBusy) return; S.archBusy=true;
+  try{
+    const list=await q(S.sb.rpc("unarchived_signoffs",{p_limit:20}));
+    for(const s of list){ try{ await archiveSo(s); }catch(e){ console.warn("補存檔失敗：",s.no,e); break; } }
+  }catch(e){ /* 尚未執行更新 SQL 時略過 */ }
+  finally{ S.archBusy=false; }
+}
+function archiveHTML(s,a,err){
+  if(err) return `<p class="small muted">${ARCH_NEED_SQL}</p>`;
+  if(a) return `<div class="list"><div class="li"><span class="grow" title="${esc(ARCH_BUCKET)}/${esc(a.path)}">已存檔<span class="muted small">　${fmtDT(a.archived_at)}</span></span>
+    <button class="btn sm" data-act="openArchive" data-id="${esc(s.id)}">開啟 PDF</button>${isAdmin()?`<button class="btn sm ghost" data-act="archiveNow" data-id="${esc(s.id)}" data-over="1">重新存檔</button>`:""}</div></div>`;
+  return `<p class="small muted" style="margin:0 0 8px">尚未存檔。系統會在背景自動補存，也可以立即存檔。</p>${isAdmin()?`<button class="btn sm" data-act="archiveNow" data-id="${esc(s.id)}">立即存檔</button>`:""}`;
+}
+async function openArchive(id,{fallback}={}){
+  const w=window.open("","_blank");
+  try{
+    const a=await q(S.sb.from("signoff_archives").select("path").eq("signoff_id",id).maybeSingle());
+    if(!a){ if(w) w.close(); if(fallback){ fallback(); return; } toast("這張簽收單還沒有存檔","err"); return; }
+    const {data,error}=await S.sb.storage.from(ARCH_BUCKET).createSignedUrl(a.path,300);
+    if(error) throw error;
+    if(w) w.location.href=data.signedUrl; else location.href=data.signedUrl;
+  }catch(e){ if(w) w.close(); if(fallback){ fallback(); return; } toast(dbErr(e),"err"); }
+}
+async function archiveNow(id,overwrite){
+  toast("正在產生 PDF 並存檔…");
+  try{ const s=await q(S.sb.from("signoffs").select("*").eq("id",id).single()); await archiveSo(s,{overwrite}); toast("已存檔"); openSo(id); }
+  catch(e){ toast("存檔失敗："+(dbErr(e)||e.message||e),"err"); }
+}
 
 /* ================= MINE ================= */
 async function viewMine(){
@@ -1044,7 +1134,7 @@ async function signSo(id){
     if(!$("#agree").checked){ toast("請先勾選確認聲明","err"); return; }
     if(pad.empty()){ toast("請先簽名","err"); return; }
     $("#sigGo").disabled=true;
-    try{ await run(()=>q(S.sb.rpc("sign_signoff",{p_id:id,p_sig:pad.path()})),"簽收完成，謝謝！"); closeModal(); viewMine(); }
+    try{ await run(()=>q(S.sb.rpc("sign_signoff",{p_id:id,p_sig:pad.path()})),"簽收完成，謝謝！"); closeModal(); viewMine(); autoArchive(id); }
     catch{ $("#sigGo").disabled=false; }
   };
 }
@@ -1062,6 +1152,23 @@ function sigPad(cv){
 }
 
 /* ================= SETTINGS ================= */
+async function setPassword(){
+  const a=$("#pw1").value, b=$("#pw2").value;
+  if(a.length<8){ toast("密碼至少需要 8 個字元","err"); return; }
+  if(!/[A-Za-z]/.test(a)||!/\d/.test(a)){ toast("密碼需要同時包含英文字母與數字","err"); return; }
+  if(a!==b){ toast("兩次輸入的密碼不一樣","err"); return; }
+  const {error}=await S.sb.auth.updateUser({password:a});
+  if(error){
+    const m=error.message||"";
+    toast(/reauth|nonce|recent/i.test(m)?"為了安全，請先登出，用驗證碼重新登入後再設定密碼。"
+         :/different/i.test(m)?"新密碼不能和目前的密碼相同。"
+         :/weak|short|length|character/i.test(m)?"密碼強度不足："+m:"設定失敗："+m,"err");
+    return;
+  }
+  $("#pw1").value=$("#pw2").value="";
+  try{ localStorage.setItem("loginMode","pw"); }catch{}
+  toast("已設定登入密碼，下次可以用帳號密碼登入");
+}
 async function viewSettings(){
   setHead("設定與權限","");
   let roles=[]; try{ roles=await q(S.sb.from("roles").select("*").order("created_at")); }catch{}
@@ -1073,6 +1180,10 @@ async function viewSettings(){
     <label class="full">簽收單保管規範<textarea class="in" name="terms" rows="6">${esc(S.cfg.terms)}</textarea></label>
   </div><div class="row" style="margin-top:12px"><button type="button" class="btn primary" data-act="saveCfg">儲存設定</button></div></form>
   ${depHTML()}
+  <div class="panel" id="pwPanel"><h3>我的登入密碼</h3><p class="small muted" style="margin:4px 0 12px">設定後，可以在登入畫面選「管理員用帳號密碼登入」，用 ${esc(S.email)} 加上密碼登入，不用每次收驗證碼。忘記密碼時，改用驗證碼登入後在這裡重新設定即可。</p>
+    <div class="form"><label>新密碼（至少 8 個字元）<input class="in" type="password" id="pw1" autocomplete="new-password"></label>
+    <label>再輸入一次<input class="in" type="password" id="pw2" autocomplete="new-password"></label></div>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn primary" data-act="setPw">設定密碼</button></div></div>
   <div class="panel"><h3>管理員與唯讀名單</h3><p class="small muted" style="margin:4px 0 10px">一般員工不需要加在這裡，只要員工資料有填 Email 就能登入。這裡只列出能管理全部資料的人。</p>
     <div class="list">${roles.map(r=>`<div class="li"><span class="grow">${esc(r.email)}${r.email===S.email?' <span class="muted small">（你）</span>':""}</span><span class="small">${r.role==="admin"?"資產管理員":"唯讀"}</span>${r.email===S.email?"":`<button class="btn sm ghost danger" data-act="delRole" data-email="${esc(r.email)}">移除</button>`}</div>`).join("")}</div>
     <div class="row" style="margin-top:10px"><input class="in" id="roleEmail" type="email" placeholder="name@company.com" style="flex:1;min-width:200px"><select class="in" id="roleSel" style="width:auto"><option value="admin">資產管理員</option><option value="viewer">唯讀</option></select><button class="btn" data-act="addRole">加入</button></div></div>
@@ -1257,10 +1368,12 @@ document.addEventListener("click", async e=>{
     case "bulkInventory": bulkInventory(); break;
     case "dlSo": dlSo(soCache); break;
     case "printSo": printSo(soCache); break;
-    case "dlMine": dlSo(await soFull(id)); break;
+    case "dlMine": openArchive(id,{fallback:async()=>dlSo(await soFull(id))}); break;
+    case "openArchive": openArchive(id); break;
+    case "archiveNow": archiveNow(id, b.dataset.over==="1"); break;
     case "copySlack": copyText(slackMsg(soCache),"已複製 Slack 通知訊息"); break;
     case "copyAllSlack": copyAllSlack(); break;
-    case "paperSigned": confirmBox("標記為紙本已簽回？","請確認已收到員工親筆簽名的紙本簽收單並歸檔。","標記已簽回",async()=>{ await run(()=>q(S.sb.from("signoffs").update({paper_signed_at:new Date().toISOString()}).eq("id",id)),"已標記為紙本簽回"); refreshCounts(); updSos(true); openSo(id); }); break;
+    case "paperSigned": confirmBox("標記為紙本已簽回？","請確認已收到員工親筆簽名的紙本簽收單並歸檔。","標記已簽回",async()=>{ await run(()=>q(S.sb.from("signoffs").update({paper_signed_at:new Date().toISOString()}).eq("id",id)),"已標記為紙本簽回"); refreshCounts(); updSos(true); await autoArchive(id); openSo(id); }); break;
     case "voidSo": confirmBox("作廢這張簽收單？","作廢後員工將無法再簽署此單，紀錄會保留。","作廢",async()=>{ await run(()=>q(S.sb.from("signoffs").update({voided:true}).eq("id",id)),"已作廢"); refreshCounts(); updSos(true); openSo(id); },true); break;
     case "delSo": confirmBox("刪除這張簽收單？","已作廢的簽收單將永久刪除，無法復原。","刪除",async()=>{ await run(()=>q(S.sb.from("signoffs").delete().eq("id",id)),"已刪除"); closeDrawer(); updSos(true); },true,soCache&&soCache.no); break;
     case "signSo": signSo(id); break;
@@ -1282,6 +1395,10 @@ document.addEventListener("click", async e=>{
     case "csvTemplate": csvTemplate(b.dataset.kind); break;
     case "sendLink": sendLink(); break;
     case "verifyOtp": verifyOtp(); break;
+    case "pwMode": pwLoginScreen(); break;
+    case "otpMode": try{ localStorage.setItem("loginMode","otp"); }catch{} loginScreen(); break;
+    case "pwLogin": pwLogin(); break;
+    case "setPw": setPassword(); break;
     case "slackLogin": S.sb.auth.signInWithOAuth({provider:"slack_oidc",options:{redirectTo:location.origin+location.pathname}}); break;
   } }catch(err){ console.error(err); }
 });
@@ -1293,12 +1410,44 @@ mobile.addEventListener("change",()=>{ if(S.list) S.list.draw(); });
 /* ================= login & boot ================= */
 function screen(html){ $("#root").innerHTML=`<div class="login"><div class="login-box"><div class="brand-mark" aria-hidden="true"></div>${html}</div></div>`; }
 function loginScreen(msg){
-  screen(`<h1>設備資產管理</h1><p class="muted small" style="margin:0 0 14px">請用公司 Email 登入，系統會寄一組驗證碼到你的信箱。</p>
+  let mode="otp"; try{ mode=localStorage.getItem("loginMode")||"otp"; }catch{}
+  if(mode==="pw"){ pwLoginScreen(msg); return; }
+  screen(`<h1>設備資產管理</h1><p class="muted small" style="margin:0 0 14px">請輸入公司 Email，系統會寄一封登入信到你的信箱。</p>
     ${msg?`<p class="small" style="color:var(--red)">${esc(msg)}</p>`:""}
     <input class="in" id="loginEmail" type="email" placeholder="name@company.com" autocomplete="email">
-    <button class="btn primary" data-act="sendLink" id="sendBtn">寄送驗證碼</button>
-    ${C.SLACK_LOGIN?`<div class="or">或</div><button class="btn" data-act="slackLogin">使用 Slack 登入</button>`:""}`);
-  setTimeout(()=>$("#loginEmail")&&$("#loginEmail").focus(),50);
+    <button class="btn primary" data-act="sendLink" id="sendBtn">寄送登入信</button>
+    ${C.SLACK_LOGIN?`<div class="or">或</div><button class="btn" data-act="slackLogin">使用 Slack 登入</button>`:""}
+    <button class="btn ghost" data-act="pwMode" style="margin-top:6px">管理員用帳號密碼登入</button>`);
+  setTimeout(()=>{ const i=$("#loginEmail"); if(i){ i.focus(); i.addEventListener("keydown",e=>{ if(e.key==="Enter") sendLink(); }); } },50);
+}
+/* 管理員帳號密碼登入：帳號是公司 Email；密碼在「設定與權限 → 我的登入密碼」設定 */
+function pwLoginScreen(msg){
+  try{ localStorage.setItem("loginMode","pw"); }catch{}
+  screen(`<h1>管理員登入</h1><p class="muted small" style="margin:0 0 14px">輸入公司 Email 與登入密碼。</p>
+    ${msg?`<p class="small" style="color:var(--red)">${esc(msg)}</p>`:""}
+    <input class="in" id="pwEmail" type="email" placeholder="name@company.com" autocomplete="username" style="margin-bottom:8px">
+    <input class="in" id="pwPass" type="password" placeholder="密碼" autocomplete="current-password">
+    <button class="btn primary" data-act="pwLogin" id="pwBtn">登入</button>
+    <p class="small muted" style="margin-top:14px">忘記密碼或還沒設定密碼：請改用驗證碼登入，再到「設定與權限 → 我的登入密碼」設定。</p>
+    <button class="btn ghost" data-act="otpMode">改用 Email 驗證碼登入</button>`);
+  setTimeout(()=>{ const e=$("#pwEmail"), p=$("#pwPass"); if(e) e.focus();
+    [e,p].forEach(x=>x&&x.addEventListener("keydown",ev=>{ if(ev.key==="Enter") pwLogin(); })); },50);
+}
+async function pwLogin(){
+  const email=($("#pwEmail").value||"").trim().toLowerCase(), password=$("#pwPass").value||"";
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast("請輸入正確的 Email","err"); return; }
+  if(!password){ toast("請輸入密碼","err"); return; }
+  $("#pwBtn").disabled=true;
+  const {error}=await S.sb.auth.signInWithPassword({email,password});
+  if(error){
+    $("#pwBtn").disabled=false;
+    const m=error.message||"";
+    toast(/invalid login|credentials/i.test(m)?"帳號或密碼錯誤。還沒設定密碼的話，請先用驗證碼登入。"
+         :/not confirmed/i.test(m)?"這個帳號還沒完成 Email 驗證，請先用驗證碼登入一次。"
+         :/rate|limit|too many/i.test(m)?"嘗試次數太多，請稍候幾分鐘再試。":"登入失敗："+m,"err");
+    return;
+  }
+  location.reload();
 }
 async function sendLink(){
   const email=$("#loginEmail").value.trim().toLowerCase();
@@ -1307,11 +1456,14 @@ async function sendLink(){
   const {error}=await S.sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
   if(error){ $("#sendBtn").disabled=false; toast(/rate|limit/i.test(error.message)?"寄信太頻繁，請稍候幾分鐘再試":"寄送失敗："+error.message,"err"); return; }
   S.loginEmail=email;
-  screen(`<h1>請到信箱收信</h1><p class="muted small" style="margin:0 0 14px">已寄到 <b>${esc(email)}</b>。輸入信中的驗證碼，或直接點信中的登入連結。</p>
-    <input class="in" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="驗證碼" style="font:600 22px var(--f-code);letter-spacing:.25em;text-align:center">
-    <button class="btn primary" data-act="verifyOtp" id="otpBtn">登入</button>
-    <p class="small muted" style="margin-top:14px">沒收到的話，請看一下垃圾郵件匣。</p><button class="btn ghost" onclick="location.reload()">重新輸入 Email</button>`);
-  setTimeout(()=>$("#otp")&&$("#otp").focus(),50);
+  screen(`<h1>請到信箱收信</h1><p style="margin:0 0 10px">登入信已寄到 <b>${esc(email)}</b>。</p>
+    <p class="muted small" style="margin:0 0 14px">請打開信件，<b>點擊信中的登入連結</b>就會自動登入（會開啟新的分頁，這一頁可以關掉）。在手機上點連結，也可以直接在手機上簽名。</p>
+    <p class="small muted" style="margin:0 0 14px">沒收到的話，請看一下垃圾郵件匣，或等一分鐘後重新寄送。</p>
+    <button class="btn ghost" onclick="location.reload()">重新輸入 Email</button>
+    <details style="margin-top:12px"><summary class="small muted" style="cursor:pointer">信中有 6 位數驗證碼？點這裡輸入</summary>
+      <input class="in" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="驗證碼" style="margin-top:10px;font:600 22px var(--f-code);letter-spacing:.25em;text-align:center">
+      <button class="btn" data-act="verifyOtp" id="otpBtn" style="margin-top:8px;width:100%">用驗證碼登入</button></details>`);
+  
 }
 async function verifyOtp(){
   const token=($("#otp").value||"").replace(/\D/g,"");
@@ -1338,6 +1490,7 @@ async function boot(){
   catch(e){ toast(dbErr(e),"err"); }
   shell(); await refreshCounts();
   go(isStaff()?"assets":"mine");
+  if(isAdmin()) setTimeout(catchUpArchives, 4000);   // 補存還沒存檔的已簽收單
 }
 boot();
 })();
