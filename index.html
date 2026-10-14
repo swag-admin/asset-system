@@ -628,10 +628,19 @@ async function saveAsset(id){
   data.life_years = fd.life_years===""?null:Number(fd.life_years);
   data.salvage = fd.salvage===""?null:Number(fd.salvage);
   if(!HELD.has(data.status)) data.holder_id=null; if(data.status!=="borrowed") data.due_date=null; if(!data.holder_id) data.assigned_date=null;
+  const prevStatus = id && drawerAsset && drawerAsset.id===id ? drawerAsset.status : null;
   const btn=$('[data-act="saveAsset"]'); btn.disabled=true;
   try{
     const row = await run(()=> id ? q(S.sb.from("assets").update(data).eq("id",id).select("id").single()) : q(S.sb.from("assets").insert(data).select("id").single()), id?"已儲存變更":"已新增資產，可以上傳照片了");
     loadEmps().catch(()=>{}); updAssets(true);
+    if(data.status==="repair" && prevStatus!=="repair"){   // 直接改成維修中：系統已自動建立維修紀錄，打開讓管理員補填
+      refreshCounts();
+      const r=await S.sb.from("repairs").select("id").eq("asset_id",id||row.id).eq("result","pending").maybeSingle();
+      if(id) closeDrawer(); else openAsset(row.id);
+      if(r.data){ openRepair(r.data.id); toast("已自動建立維修紀錄，請補填問題描述與維修廠商"); }
+      return;
+    }
+    if(id && prevStatus==="repair" && data.status!=="repair") refreshCounts();
     if(id) closeDrawer(); else openAsset(row.id);
   }catch{ btn.disabled=false; }
 }
@@ -952,11 +961,14 @@ async function updSos(keep){
 }
 const sigSvg = sig => sig&&sig.d ? `<svg viewBox="0 0 ${+sig.w||600} ${+sig.h||200}" xmlns="http://www.w3.org/2000/svg"><path d="${esc(sig.d)}" fill="none" stroke="#111" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>` : "";
 let soCache=null;
+// 取得 Admin 簽名（尚未執行 update-2026-10f 時略過）
+async function attachCs(s){ try{ const {data,error}=await S.sb.from("signoff_countersigns").select("*").eq("signoff_id",s.id).maybeSingle(); s.cs=error?null:data; s.csMissing=!!error; }catch{ s.cs=null; s.csMissing=true; } return s; }
 async function openSo(id){
   openDrawer("","<div class='loading'>載入中…</div>","");
   let s; try{ s=await q(S.sb.from("signoffs").select("*").eq("id",id).single()); }catch(e){ toast(dbErr(e),"err"); closeDrawer(); return; }
   soCache=s; const st=soStatus(s), done=st.k==="signed"||st.k==="paper";
   const ar=done ? await S.sb.from("signoff_archives").select("*").eq("signoff_id",id).maybeSingle() : {data:null,error:null};
+  await attachCs(s);
   const body=`<div class="row" style="justify-content:space-between;align-items:flex-start"><dl class="kv">
     <dt>類型</dt><dd>${SO_TYPE[s.type]}</dd><dt>員工</dt><dd>${esc(s.employee_name)}（${esc(s.emp_no)}）${esc(s.dept)}</dd>
     <dt>建立</dt><dd class="num">${fmtDT(s.created_at)}</dd><dt>簽收方式</dt><dd>${s.signer_email?"線上簽名":"紙本簽名"}</dd>
@@ -965,6 +977,8 @@ async function openSo(id){
     <div class="sec">設備明細（${s.items.length} 項）</div>
     <div class="list">${s.items.map((it,i)=>`<div class="li"><span class="num muted">${i+1}</span><span class="tag">${esc(it.tag)}</span><span class="grow">${esc(it.name)}<span class="muted small"> ${esc(it.bm)}${it.since?`・${esc(it.since.replace(/-/g,"/"))} 領用`:""}</span></span>${it.due?`<span class="due">應還 ${esc(it.due)}</span>`:""}</div>`).join("")}</div>
     ${s.signature?`<div class="sec">員工簽名</div><div class="sigimg">${sigSvg(s.signature)}</div>`:""}
+    ${done&&!s.csMissing?`<div class="sec row" style="justify-content:space-between"><span>Admin 簽名</span>${isAdmin()?`<button class="btn sm${s.cs?" ghost":""}" data-act="adminSign" data-id="${esc(id)}">${s.cs?"重新簽名":"Admin 簽名"}</button>`:""}</div>
+      ${s.cs?`<div class="sigimg">${sigSvg(s.cs.signature)}</div><p class="small muted" style="margin:6px 0 0">${esc(s.cs.signer_name)}・${fmtDT(s.cs.signed_at)}</p>`:`<p class="small muted" style="margin:0">尚未簽名。任一位資產管理員都可以簽。</p>`}`:""}
     ${done?`<div class="sec">PDF 存檔</div>${archiveHTML(s,ar.data,ar.error)}`:""}
     ${st.k==="pending"&&s.signer_email?`<div class="sec">通知員工簽收</div><p class="small muted">複製下方訊息貼到 Slack 私訊給員工，員工點連結登入即可線上簽名。</p><textarea class="in" readonly rows="6">${esc(slackMsg(s))}</textarea>`:""}`;
   const A=isAdmin();
@@ -1011,13 +1025,13 @@ ${s.items.map((it,i)=>`<tr><td class="nw">${i+1}</td><td class="nw">${esc(it.tag
 <div class="sign"><div class="box"><div class="lab">員工簽名：</div><div class="line">${sigSvg(s.signature)}</div>
 <div class="dt">${st.at?`簽署時間：${fmtDT(st.at)}${st.k==="signed"?"（線上簽署）":""}`:"日期：　　　年　　月　　日"}</div>
 ${st.k==="signed"||st.k==="paper"?`<div class="seal">已簽收<small>${fmtD(st.at)}</small></div>`:""}</div>
-<div class="box"><div class="lab">Admin：</div><div class="line"></div><div class="dt">日期：　　　年　　月　　日</div></div></div>
+<div class="box"><div class="lab">Admin：</div><div class="line">${s.cs?sigSvg(s.cs.signature):""}</div><div class="dt">${s.cs?`${esc(s.cs.signer_name)}・簽署時間：${fmtDT(s.cs.signed_at)}`:"日期：　　　年　　月　　日"}</div></div></div>
 <div class="foot">本單由設備資產管理系統產生${st.k==="signed"?`，員工以 ${esc(s.signer_email)} 登入驗證後線上簽署`:""}。</div></body></html>`;
 }
 function download(filename, data, type){
   const url=URL.createObjectURL(new Blob([data],{type})); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
 }
-async function soFull(id){ return soCache&&soCache.id===id ? soCache : await q(S.sb.from("signoffs").select("*").eq("id",id).single()); }
+async function soFull(id){ if(soCache&&soCache.id===id) return soCache; return attachCs(await q(S.sb.from("signoffs").select("*").eq("id",id).single())); }
 function dlSo(s){ download(`${SO_SHORT[s.type]}簽收單_${s.no}_${s.employee_name}.html`, formHTML(s), "text/html;charset=utf-8"); }
 function printSo(s){ const w=window.open("","_blank"); if(!w){ toast("瀏覽器擋住了彈出視窗，請改用「下載簽收單」","err"); return; } w.document.write(formHTML(s)); w.document.close(); setTimeout(()=>w.print(),400); }
 
@@ -1069,6 +1083,7 @@ async function soPdf(s){
   } finally { ifr.remove(); }
 }
 async function archiveSo(s,{overwrite=false}={}){
+  if(s.cs===undefined) await attachCs(s);
   const path=archivePath(s), blob=await soPdf(s);
   const up=await S.sb.storage.from(ARCH_BUCKET).upload(path,blob,{contentType:"application/pdf",upsert:overwrite,cacheControl:"3600"});
   if(up.error && !/exist|duplicate/i.test(up.error.message||"")) throw up.error;   // 已存在＝之前上傳過，直接登記即可
@@ -1145,6 +1160,27 @@ async function signSo(id){
     catch{ $("#sigGo").disabled=false; }
   };
 }
+/* Admin 在簽收單上簽名（員工簽收後，任一位資產管理員都可以簽） */
+function adminSign(id){
+  modal(`<h2>Admin 簽名</h2><p class="small muted" style="margin:0 0 12px">確認員工已簽收、設備已點交無誤後，在下方簽名。簽名會顯示在簽收單的「Admin」欄，並重新存檔 PDF。</p>
+  <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="small muted">請在框內簽名</span><button class="btn sm ghost" id="aSigClear">重寫</button></div>
+  <div class="sigwrap"><canvas id="aSigc"></canvas><div class="hint" id="aSigHint">用滑鼠或手指在此簽名</div></div>
+  <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" data-close>取消</button><button class="btn primary" id="aSigGo">確認簽名</button></div>`);
+  const pad=sigPad($("#aSigc"));
+  $("#aSigClear").onclick=()=>{ pad.clear(); $("#aSigHint").classList.remove("hide"); };
+  $("#aSigc").addEventListener("pointerdown",()=>$("#aSigHint").classList.add("hide"));
+  $("#aSigGo").onclick=async()=>{
+    if(pad.empty()){ toast("請先簽名","err"); return; }
+    $("#aSigGo").disabled=true;
+    try{
+      await run(()=>q(S.sb.rpc("countersign_signoff",{p_id:id,p_sig:pad.path()})),"已簽名，正在更新 PDF 存檔…");
+      closeModal();
+      try{ const so=await attachCs(await q(S.sb.from("signoffs").select("*").eq("id",id).single())); await archiveSo(so,{overwrite:true}); toast("已簽名並更新 PDF 存檔"); }
+      catch(e){ console.warn("重新存檔失敗",e); }
+      openSo(id);
+    }catch{ $("#aSigGo").disabled=false; }
+  };
+}
 function sigPad(cv){
   const W=600,H=200; let strokes=[],cur=null; const ctx=cv.getContext("2d");
   const fit=()=>{ const r=cv.getBoundingClientRect(),d=devicePixelRatio||1; cv.width=r.width*d; cv.height=r.height*d; redraw(); };
@@ -1173,8 +1209,7 @@ async function setPassword(){
     return;
   }
   $("#pw1").value=$("#pw2").value="";
-  try{ localStorage.setItem("loginMode","pw"); }catch{}
-  toast("已設定登入密碼，下次可以用帳號密碼登入");
+  toast(`已設定登入密碼。之後請用管理員專用網址登入：${location.origin+location.pathname}?admin`);
 }
 async function viewSettings(){
   setHead("設定與權限","");
@@ -1187,7 +1222,7 @@ async function viewSettings(){
     <label class="full">簽收單保管規範<textarea class="in" name="terms" rows="6">${esc(S.cfg.terms)}</textarea></label>
   </div><div class="row" style="margin-top:12px"><button type="button" class="btn primary" data-act="saveCfg">儲存設定</button></div></form>
   ${depHTML()}
-  <div class="panel" id="pwPanel"><h3>我的登入密碼</h3><p class="small muted" style="margin:4px 0 12px">設定後，可以在登入畫面選「管理員用帳號密碼登入」，用 ${esc(S.email)} 加上密碼登入，不用每次收驗證碼。忘記密碼時，改用驗證碼登入後在這裡重新設定即可。</p>
+  <div class="panel" id="pwPanel"><h3>我的登入密碼</h3><p class="small muted" style="margin:4px 0 12px">設定後，請用管理員專用網址 <b>${esc(location.origin+location.pathname)}?admin</b> 登入（建議加入書籤），輸入 ${esc(S.email)} 和密碼即可，不用每次收信。忘記密碼時，在專用網址按「改用 Email 登入信」登入後，再到這裡重新設定。</p>
     <div class="form"><label>新密碼（至少 8 個字元）<input class="in" type="password" id="pw1" autocomplete="new-password"></label>
     <label>再輸入一次<input class="in" type="password" id="pw2" autocomplete="new-password"></label></div>
     <div class="row" style="margin-top:12px"><button type="button" class="btn primary" data-act="setPw">設定密碼</button></div></div>
@@ -1385,6 +1420,7 @@ document.addEventListener("click", async e=>{
     case "voidSo": confirmBox("作廢這張簽收單？","作廢後員工將無法再簽署此單，紀錄會保留。","作廢",async()=>{ await run(()=>q(S.sb.from("signoffs").update({voided:true}).eq("id",id)),"已作廢"); refreshCounts(); updSos(true); openSo(id); },true); break;
     case "delSo": confirmBox("刪除這張簽收單？","已作廢的簽收單將永久刪除，無法復原。","刪除",async()=>{ await run(()=>q(S.sb.from("signoffs").delete().eq("id",id)),"已刪除"); closeDrawer(); updSos(true); },true,soCache&&soCache.no); break;
     case "signSo": signSo(id); break;
+    case "adminSign": adminSign(id); break;
     case "saveCfg": saveCfg(); break;
     case "addRole": addRole(); break;
     case "delRole": delRole(b.dataset.email); break;
@@ -1404,7 +1440,9 @@ document.addEventListener("click", async e=>{
     case "sendLink": sendLink(); break;
     case "verifyOtp": verifyOtp(); break;
     case "pwMode": pwLoginScreen(); break;
-    case "otpMode": try{ localStorage.setItem("loginMode","otp"); }catch{} loginScreen(); break;
+    case "otpMode": loginScreen("",{otp:true}); break;
+    case "resendLink": sendLink({email:S.loginEmail,resend:true}); break;
+    case "changeEmail": clearInterval(S.cdTimer); loginScreen("",{otp:true}); break;
     case "pwLogin": pwLogin(); break;
     case "setPw": setPassword(); break;
     case "slackLogin": S.sb.auth.signInWithOAuth({provider:"slack_oidc",options:{redirectTo:location.origin+location.pathname}}); break;
@@ -1417,27 +1455,29 @@ mobile.addEventListener("change",()=>{ if(S.list) S.list.draw(); });
 
 /* ================= login & boot ================= */
 function screen(html){ $("#root").innerHTML=`<div class="login"><div class="login-box"><div class="brand-mark" aria-hidden="true"></div>${html}</div></div>`; }
-function loginScreen(msg){
-  let mode="otp"; try{ mode=localStorage.getItem("loginMode")||"otp"; }catch{}
-  if(mode==="pw"){ pwLoginScreen(msg); return; }
-  screen(`<h1>設備資產管理</h1><p class="muted small" style="margin:0 0 14px">請輸入公司 Email，系統會寄一封登入信到你的信箱。</p>
+function loginScreen(msg,opts={}){
+  if(ADMIN_ENTRY && !opts.otp){ pwLoginScreen(msg); return; }
+  let last=""; try{ last=localStorage.getItem("otpLastEmail")||""; }catch{}
+  const admin=ADMIN_ENTRY;
+  screen(`<h1>${admin?"管理員登入":"設備簽收"}</h1>
+    <p class="muted small" style="margin:0 0 14px">${admin?"輸入公司 Email，系統會寄一封登入信到你的信箱。":"請輸入你的公司 Email，系統會寄一封登入信給你，點信中的連結就能查看並簽收你的設備。"}</p>
     ${msg?`<p class="small" style="color:var(--red)">${esc(msg)}</p>`:""}
-    <input class="in" id="loginEmail" type="email" placeholder="name@company.com" autocomplete="email">
+    <input class="in" id="loginEmail" type="email" placeholder="name@company.com" autocomplete="email" value="${esc(last)}">
     <button class="btn primary" data-act="sendLink" id="sendBtn">寄送登入信</button>
-    ${C.SLACK_LOGIN?`<div class="or">或</div><button class="btn" data-act="slackLogin">使用 Slack 登入</button>`:""}
-    <button class="btn ghost" data-act="pwMode" style="margin-top:6px">管理員用帳號密碼登入</button>`);
+    <p class="small muted" style="margin:12px 0 0">按一次就好，信件約 1 分鐘內送達。</p>
+    ${C.SLACK_LOGIN&&!admin?`<div class="or">或</div><button class="btn" data-act="slackLogin">使用 Slack 登入</button>`:""}
+    ${admin?`<button class="btn ghost" data-act="pwMode" style="margin-top:6px">改用帳號密碼登入</button>`:""}`);
   setTimeout(()=>{ const i=$("#loginEmail"); if(i){ i.focus(); i.addEventListener("keydown",e=>{ if(e.key==="Enter") sendLink(); }); } },50);
 }
 /* 管理員帳號密碼登入：帳號是公司 Email；密碼在「設定與權限 → 我的登入密碼」設定 */
 function pwLoginScreen(msg){
-  try{ localStorage.setItem("loginMode","pw"); }catch{}
   screen(`<h1>管理員登入</h1><p class="muted small" style="margin:0 0 14px">輸入公司 Email 與登入密碼。</p>
     ${msg?`<p class="small" style="color:var(--red)">${esc(msg)}</p>`:""}
     <input class="in" id="pwEmail" type="email" placeholder="name@company.com" autocomplete="username" style="margin-bottom:8px">
     <input class="in" id="pwPass" type="password" placeholder="密碼" autocomplete="current-password">
     <button class="btn primary" data-act="pwLogin" id="pwBtn">登入</button>
-    <p class="small muted" style="margin-top:14px">忘記密碼或還沒設定密碼：請改用驗證碼登入，再到「設定與權限 → 我的登入密碼」設定。</p>
-    <button class="btn ghost" data-act="otpMode">改用 Email 驗證碼登入</button>`);
+    <p class="small muted" style="margin-top:14px">忘記密碼或還沒設定密碼：請改用登入信登入，再到「設定與權限 → 我的登入密碼」設定。</p>
+    <button class="btn ghost" data-act="otpMode">改用 Email 登入信</button>`);
   setTimeout(()=>{ const e=$("#pwEmail"), p=$("#pwPass"); if(e) e.focus();
     [e,p].forEach(x=>x&&x.addEventListener("keydown",ev=>{ if(ev.key==="Enter") pwLogin(); })); },50);
 }
@@ -1457,21 +1497,44 @@ async function pwLogin(){
   }
   location.reload();
 }
-async function sendLink(){
-  const email=$("#loginEmail").value.trim().toLowerCase();
+/* ---------- 登入：員工與管理員分開 ----------
+   員工：系統網址（Slack 通知裡的連結）→ 只有「寄送登入信」
+   管理員：系統網址後面加上 ?admin → 帳號密碼登入（也可改用登入信） */
+const ADMIN_ENTRY = /[?&]admin(\b|=|&|$)/.test(location.search) || /^#admin/.test(location.hash);
+const COOLDOWN = 60;   // 同一個 Email 60 秒內不重複寄信，避免一直按造成寄信上限
+const lastSent = email => { try{ return +localStorage.getItem("otpSent:"+email)||0; }catch{ return 0; } };
+const markSent = email => { try{ localStorage.setItem("otpSent:"+email,String(Date.now())); localStorage.setItem("otpLastEmail",email); }catch{} };
+async function sendLink(opts={}){
+  const email=(opts.email || ($("#loginEmail")&&$("#loginEmail").value) || "").trim().toLowerCase();
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast("請輸入正確的 Email","err"); return; }
-  $("#sendBtn").disabled=true;
+  const wait=Math.ceil(COOLDOWN-(Date.now()-lastSent(email))/1000);
+  if(wait>0){ if(opts.resend) toast(`請再等 ${wait} 秒才能重新寄送`,"err"); else sentScreen(email); return; }   // 剛寄過就不重寄
+  const btn=$("#sendBtn")||$("#resendBtn"); if(btn) btn.disabled=true;
   const {error}=await S.sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
-  if(error){ $("#sendBtn").disabled=false; toast(/rate|limit/i.test(error.message)?"寄信太頻繁，請稍候幾分鐘再試":"寄送失敗："+error.message,"err"); return; }
+  if(error){
+    if(btn) btn.disabled=false;
+    toast(/rate|limit|seconds/i.test(error.message)
+      ? (ADMIN_ENTRY ? "系統寄信次數暫時達到上限。管理員可以改用帳號密碼登入。" : "目前寄信的人比較多，暫時寄不出登入信。請 5～10 分鐘後再試，不用一直重按；一直不行請聯絡行政部。")
+      : "寄送失敗："+error.message, "err");
+    return;
+  }
+  markSent(email); sentScreen(email);
+}
+function sentScreen(email){
   S.loginEmail=email;
   screen(`<h1>請到信箱收信</h1><p style="margin:0 0 10px">登入信已寄到 <b>${esc(email)}</b>。</p>
     <p class="muted small" style="margin:0 0 14px">請打開信件，<b>點擊信中的登入連結</b>就會自動登入（會開啟新的分頁，這一頁可以關掉）。在手機上點連結，也可以直接在手機上簽名。</p>
-    <p class="small muted" style="margin:0 0 14px">沒收到的話，請看一下垃圾郵件匣，或等一分鐘後重新寄送。</p>
-    <button class="btn ghost" onclick="location.reload()">重新輸入 Email</button>
+    <p class="small muted" style="margin:0 0 14px">信件通常 1 分鐘內送達，沒看到請先查看垃圾郵件匣。</p>
+    <button class="btn" data-act="resendLink" id="resendBtn" disabled>重新寄送</button>
+    <button class="btn ghost" data-act="changeEmail">換一個 Email</button>
     <details style="margin-top:12px"><summary class="small muted" style="cursor:pointer">信中有 6 位數驗證碼？點這裡輸入</summary>
       <input class="in" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="驗證碼" style="margin-top:10px;font:600 22px var(--f-code);letter-spacing:.25em;text-align:center">
       <button class="btn" data-act="verifyOtp" id="otpBtn" style="margin-top:8px;width:100%">用驗證碼登入</button></details>`);
-  
+  clearInterval(S.cdTimer);
+  const tick=()=>{ const b=$("#resendBtn"); if(!b){ clearInterval(S.cdTimer); return; }
+    const w=Math.ceil(COOLDOWN-(Date.now()-lastSent(email))/1000);
+    if(w>0){ b.disabled=true; b.textContent=`重新寄送（${w} 秒後可按）`; } else { b.disabled=false; b.textContent="重新寄送登入信"; clearInterval(S.cdTimer); } };
+  tick(); S.cdTimer=setInterval(tick,1000);
 }
 async function verifyOtp(){
   const token=($("#otp").value||"").replace(/\D/g,"");
