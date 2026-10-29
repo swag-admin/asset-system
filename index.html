@@ -177,6 +177,7 @@ textarea.in{resize:vertical;min-height:90px;line-height:1.6}
 .sec{margin:22px 0 8px;font-size:14px;font-weight:700}
 .kv{display:grid;grid-template-columns:96px 1fr;gap:6px 12px;font-size:14px}
 .kv dt{color:var(--ink-2)} .kv dd{margin:0}
+.content>.list,.content>.cards,.content>.sec,.content>p{flex-shrink:0}   /* 內容很多時，避免清單被壓扁 */
 .list{border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .list .li{display:flex;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);font-size:14px}
 .list .li:last-child{border-bottom:0}
@@ -285,12 +286,13 @@ textarea.in{resize:vertical;min-height:90px;line-height:1.6}
 const C = window.APP_CONFIG || {};
 const STATUS = {available:"在庫可用", in_use:"使用中", borrowed:"借用中", repair:"維修中", lost:"遺失", retired:"已報廢"};
 const HELD = new Set(["in_use","borrowed","repair"]);
-const SO_TYPE = {issue:"資產設備領用簽收單", borrow:"測試機借用簽收單", return:"資產設備歸還確認單", inventory:"年度資產盤點確認單"};
-const SO_SHORT = {issue:"領用", borrow:"借用", return:"歸還", inventory:"盤點"};
+const SO_TYPE = {issue:"資產設備領用簽收單", borrow:"測試機借用簽收單", return:"資產設備歸還確認單", inventory:"年度資產盤點確認單", custody:"負責設備盤點單"};
+const SO_SHORT = {issue:"領用", borrow:"借用", return:"歸還", inventory:"盤點", custody:"負責設備盤點"};
+const CUSTODY_TERMS = "一、上列設備為公司財產，由本人擔任負責人，負責保管與借出管理。\n二、借出時應於系統登記借用人與預計歸還日，歸還時登記歸還。\n三、每半年與 Admin 盤點一次，確認設備數量與狀況。\n四、設備遺失或損壞時，應立即通知 Admin。";
 const REPAIR = {pending:"維修中", fixed:"已修復", parts:"更換零件", replaced:"原廠換新", scrapped:"無法修復，報廢", no_fault:"檢測無異常"};
 const SALVAGE_MODE = {tax:"稅法算法：成本 ÷（耐用年數＋1）", percent:"成本的固定百分比", zero:"不留殘值"};
 const MAX_PHOTOS = 6, PAGE = 100, BUCKET = "asset-photos";
-const A_COLS = "id,tag,name,cat,brand,model,os,status,holder_id,holder_name,last_holder_name,due_date,assigned_date,location,updated_at,photos";
+let A_COLS = "id,tag,name,cat,brand,model,os,status,holder_id,holder_name,last_holder_name,due_date,assigned_date,location,updated_at,photos";   // 執行 update-2026-10g 後會加上負責人欄位
 const GONE = new Set(["lost","retired"]);
 const SO_COLS = "id,no,type,employee_id,employee_name,emp_no,dept,signer_email,items,created_at,voided,paper_signed_at,signed_at";
 
@@ -312,7 +314,8 @@ const fmtDT = t => t ? `${fmtD(t)} ${pad(new Date(t).getHours())}:${pad(new Date
 const todayStr = () => { const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
 const isOver = a => a.status==="borrowed" && a.due_date && a.due_date < todayStr();
 const shortDue = d => d ? (d.slice(0,4)===todayStr().slice(0,4) ? d.slice(5).replace("-","/") : d.replace(/-/g,"/")) : "";
-const words = q => q.trim().toLowerCase().split(/\s+/).map(w=>w.replace(/[%_\\*,()"]/g,"")).filter(Boolean);
+// 搜尋關鍵字：% 和 _ 在資料庫搜尋語法中是萬用字元，要跳脫成一般字元（資產編號常有底線，例如 KeyboardN_053）
+const words = q => q.trim().toLowerCase().split(/\s+/).map(w=>w.replace(/[*,()"]/g,"").replace(/\\/g,"").replace(/[%_]/g,m=>"\\"+m)).filter(Boolean);
 const debounce = (f,ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>f(...a),ms); }; };
 const photoUrl = p => `${C.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${p.split("/").map(encodeURIComponent).join("/")}`;
 const coverT = a => a.photos && a.photos[0] ? photoUrl(a.photos[0].t || a.photos[0].p) : "";
@@ -455,7 +458,7 @@ function viewAssets(){
   $("#asort").value=S.f.sort;
   S.list = new PList($("#alist"), {grid:"g-assets", onClick:openAsset,
     head:`<span></span><span>資產編號</span><span>名稱／型號</span><span class="mh">類別</span><span>狀態</span><span class="mh">保管人</span><span class="mh">位置</span><span class="mh">更新／歸還</span>`,
-    row:a=>`${coverT(a)?`<span class="thumb"><img src="${esc(coverT(a))}" alt="" loading="lazy" decoding="async"></span>`:`<span class="thumb none" aria-hidden="true">—</span>`}<span><span class="tag">${esc(a.tag)}</span></span><span>${esc(a.name)}<span class="l2">${esc([a.brand,a.model,a.os].filter(Boolean).join(" "))||"&nbsp;"}</span></span><span class="mh muted small">${esc(a.cat)}</span><span><span class="st ${esc(a.status)}">${STATUS[a.status]||""}</span>${mobile.matches&&a.holder_id?`<span class="l2 ${isOver(a)?"due over":""}">${esc(a.holder_name)}${isOver(a)?"・逾期":""}</span>`:mobile.matches&&GONE.has(a.status)&&a.last_holder_name?`<span class="l2">原保管人 ${esc(a.last_holder_name)}</span>`:""}</span><span class="mh">${a.holder_name?`${esc(a.holder_name)}${a.assigned_date?`<span class="l2">${esc(a.assigned_date.replace(/-/g,"/"))} 領用</span>`:""}`:GONE.has(a.status)&&a.last_holder_name?`<span class="muted">${esc(a.last_holder_name)}<span class="l2">原保管人</span></span>`:'<span class="muted">—</span>'}</span><span class="mh muted small">${esc(a.location)}</span>${a.status==="borrowed"&&a.due_date?`<span class="mh due ${isOver(a)?"over":""}">${isOver(a)?"逾期 ":"應還 "}${esc(shortDue(a.due_date))}</span>`:`<span class="mh muted num">${fmtD(a.updated_at)}</span>`}`,
+    row:a=>`${coverT(a)?`<span class="thumb"><img src="${esc(coverT(a))}" alt="" loading="lazy" decoding="async"></span>`:`<span class="thumb none" aria-hidden="true">—</span>`}<span><span class="tag">${esc(a.tag)}</span></span><span>${esc(a.name)}<span class="l2">${esc([a.brand,a.model,a.os].filter(Boolean).join(" "))||"&nbsp;"}</span></span><span class="mh muted small">${esc(a.cat)}</span><span><span class="st ${esc(a.status)}">${STATUS[a.status]||""}</span>${mobile.matches&&a.holder_id?`<span class="l2 ${isOver(a)?"due over":""}">${esc(a.holder_name)}${isOver(a)?"・逾期":""}</span>`:mobile.matches&&GONE.has(a.status)&&a.last_holder_name?`<span class="l2">原保管人 ${esc(a.last_holder_name)}</span>`:""}</span><span class="mh">${!a.holder_name&&a.custodian_name&&!GONE.has(a.status)?`<span class="muted">${esc(a.custodian_name)}<span class="l2">負責人</span></span>`:a.holder_name?`${esc(a.holder_name)}${a.assigned_date?`<span class="l2">${esc(a.assigned_date.replace(/-/g,"/"))} 領用</span>`:""}`:GONE.has(a.status)&&a.last_holder_name?`<span class="muted">${esc(a.last_holder_name)}<span class="l2">原保管人</span></span>`:'<span class="muted">—</span>'}</span><span class="mh muted small">${esc(a.location)}</span>${a.status==="borrowed"&&a.due_date?`<span class="mh due ${isOver(a)?"over":""}">${isOver(a)?"逾期 ":"應還 "}${esc(shortDue(a.due_date))}</span>`:`<span class="mh muted num">${fmtD(a.updated_at)}</span>`}`,
     empty:()=> S.stats && S.stats.total ? "找不到符合條件的資產，試試其他關鍵字或清除篩選。" : (isAdmin()?`尚無資產資料。<br><br><button class="btn primary" data-act="newAsset">新增第一筆資產</button> <button class="btn" data-act="importAssets">從 CSV 匯入</button>`:"尚無資產資料。"),
     foot:n=>`<span>顯示 ${n.toLocaleString()} ／ 共 ${(S.stats?.total||0).toLocaleString()} 筆</span><span>${S.f.holder?`已篩選保管人：${esc(empName(S.f.holder))} <button class="btn sm ghost" data-act="clearHolder">清除</button>`:""}</span>`,
     fetch:(from,to)=>q(assetQuery(A_COLS).range(from,to))
@@ -566,7 +569,8 @@ async function openAsset(id){
     try{ [a,ev]=await Promise.all([q(S.sb.from("assets").select("*").eq("id",id).single()), q(S.sb.from("asset_events").select("at,action,by_email").eq("asset_id",id).order("at",{ascending:false}).limit(30))]); }
     catch(e){ toast(dbErr(e),"err"); closeDrawer(); return; }
     const [vr,rr,ar]=await Promise.all([S.sb.from("asset_values").select("*").eq("id",id).maybeSingle(), S.sb.from("repairs").select("*").eq("asset_id",id).order("reported_at",{ascending:false}).limit(50), S.sb.from("asset_assignments").select("*").eq("asset_id",id).order("start_date",{ascending:false}).limit(50)]);
-    extra={val:vr.data, reps:rr.data||[], asg:ar.data||[], missing:!!(vr.error||rr.error||ar.error)}; }
+    extra={val:vr.data, reps:rr.data||[], asg:ar.data||[], missing:!!(vr.error||rr.error||ar.error)};
+    if(S.hasCust && a.custodian_id){ const {data}=await S.sb.from("custody_loans").select("*").eq("asset_id",id).order("lent_at",{ascending:false}).limit(50); extra.loans=data||[]; } }
   drawerAsset=a;
   const v = a || {tag:await nextTag(), status:"available", cat:S.cfg.categories[0]||"其他"};
   const cats = S.cfg.categories.includes(v.cat)||!v.cat ? S.cfg.categories : [...S.cfg.categories, v.cat];
@@ -582,6 +586,7 @@ async function openAsset(id){
     <label>存放位置<input class="in" name="location" value="${esc(v.location)}" placeholder="例：台北 8F"></label>
     <label>狀態<select class="in" name="status">${Object.entries(STATUS).map(([k,l])=>`<option value="${k}" ${v.status===k?"selected":""}>${l}</option>`).join("")}</select></label>
     <label id="holderWrap" class="${GONE.has(v.status)?"hide":""}">保管人／借用人${empPicker("holder_id",v.holder_id)}</label>
+    ${S.hasCust?`<label>負責人（測試機等由專人保管、借出的設備）${empPicker("custodian_id",v.custodian_id,"選填：輸入姓名或員工編號")}</label>`:""}
     <label id="lastWrap" class="${GONE.has(v.status)?"":"hide"}">原保管人（遺失或報廢前的保管人）${empPicker("last_holder_id",v.last_holder_id,"輸入姓名、員工編號搜尋；不確定可留空")}</label>
     <label id="assignWrap" class="${v.holder_id?"":"hide"}">領用日<input class="in" type="date" name="assigned_date" value="${esc(v.assigned_date)}"></label>
     <label id="dueWrap" class="${v.status==="borrowed"?"":"hide"}"><span class="req">預計歸還日</span><input class="in" type="date" name="due_date" value="${esc(v.due_date)}"></label>
@@ -622,7 +627,8 @@ async function saveAsset(id){
   const fd=Object.fromEntries(new FormData(f).entries()); for(const k in fd) fd[k]=String(fd[k]).trim();
   if((fd.status==="in_use"||fd.status==="borrowed") && !fd.holder_id){ toast(`狀態為「${STATUS[fd.status]}」時請選擇${fd.status==="borrowed"?"借用人":"保管人"}`,"err"); return; }
   if(fd.status==="borrowed" && !fd.due_date){ toast("請填寫預計歸還日","err"); f.due_date.focus(); return; }
-  const data={...fd}; for(const k of ["holder_id","last_holder_id","due_date","assigned_date","purchase_date","warranty_end"]) data[k]=data[k]||null;
+  const data={...fd}; for(const k of ["holder_id","last_holder_id","custodian_id","due_date","assigned_date","purchase_date","warranty_end"]) data[k]=data[k]||null;
+  if(!S.hasCust) delete data.custodian_id;
   if(!GONE.has(data.status)) delete data.last_holder_id;   // 只有遺失／報廢時由畫面指定，其餘由系統自動記錄
   data.cost = fd.cost===""?null:Number(fd.cost);
   data.life_years = fd.life_years===""?null:Number(fd.life_years);
@@ -712,6 +718,11 @@ function assetExtraHTML(a,x){
   const open=x.reps.find(r=>r.result==="pending");
   h+=`<div class="sec row" style="justify-content:space-between"><span>維修紀錄（${x.reps.length}）</span>${isAdmin()&&!open&&a.status!=="retired"?`<button class="btn sm" data-act="newRepair" data-id="${esc(a.id)}">新增報修</button>`:""}</div>`;
   h+= x.reps.length?`<div class="list">${x.reps.map(r=>`<div class="li" style="cursor:pointer" data-act="openRepair" data-id="${esc(r.id)}"><span class="num muted">${fmtD(r.reported_at)}</span><span class="grow">${esc(r.issue)}${r.vendor?`<span class="muted small">　${esc(r.vendor)}</span>`:""}</span>${r.cost!=null?`<span class="num">${money(r.cost)}</span>`:""}${repairBadge(r)}</div>`).join("")}</div>`:`<p class="small muted">沒有維修紀錄。</p>`;
+  if(a.custodian_id){
+    const ls=x.loans||[];
+    h+=`<div class="sec">負責人借出紀錄（${ls.length}）</div><p class="small muted" style="margin:0 0 8px">負責人：${esc(a.custodian_name)}。借出與歸還由負責人在「我的資產」登記。</p>`;
+    h+= ls.length?`<div class="list">${ls.map(l=>`<div class="li"><span class="grow">${esc(l.borrower_name)}${l.note?`<span class="muted small">　${esc(l.note)}</span>`:""}</span><span class="num muted">${fmtD(l.lent_at)} – ${l.returned_at?fmtD(l.returned_at):"借出中"}</span></div>`).join("")}</div>`:`<p class="small muted">沒有借出紀錄。</p>`;
+  }
   h+=`<div class="sec">使用紀錄（${x.asg.length}）</div>`;
   h+= x.asg.length?`<div class="list">${x.asg.map(u=>`<div class="li"><span class="grow">${esc(u.employee_name||"（已刪除的員工）")}<span class="muted small">　${u.kind==="borrow"?"借用":"領用"}${u.signoff_no?"・"+esc(u.signoff_no):""}</span></span><span class="num muted">${fmtD(u.start_date)} – ${u.end_date?fmtD(u.end_date):"使用中"}</span></div>`).join("")}</div>`:`<p class="small muted">沒有使用紀錄。</p>`;
   return h;
@@ -855,8 +866,9 @@ function updEmps(keep){
 }
 async function openEmp(id){
   const e = id ? S.emps.get(id) : null; if(id && !e) return;
-  let mine=[], sos=[], used=[];
+  let mine=[], sos=[], used=[], cust=[];
   if(id){ openDrawer("","<div class='loading'>載入中…</div>","");
+    if(S.hasCust){ const {data}=await S.sb.from("assets").select("id,tag,name,status").eq("custodian_id",id).order("tag").limit(1000); cust=data||[]; }
     try{ let ur; [mine,sos,ur]=await Promise.all([q(S.sb.from("assets").select("id,tag,name,status,due_date,assigned_date").eq("holder_id",id).order("tag").limit(500)), q(S.sb.from("signoffs").select(SO_COLS).eq("employee_id",id).order("created_at",{ascending:false}).limit(50)),
            S.sb.from("asset_assignments").select("*,assets(id,tag,name)").eq("employee_id",id).not("end_date","is",null).order("start_date",{ascending:false}).limit(200)]); used=ur.data||[]; }
     catch(err){ toast(dbErr(err),"err"); closeDrawer(); return; } }
@@ -879,6 +891,9 @@ async function openEmp(id){
       <button class="btn sm" data-act="newSo" data-id="${esc(id)}" data-type="return" ${mine.length?"":"disabled"}>產生歸還單</button>`:""}
       <button class="btn sm ghost" data-act="viewHolder" data-id="${esc(id)}">在資產總覽查看</button>
     </div>
+    ${cust.length?`<div class="sec">負責的設備（${cust.length}）</div><p class="small muted" style="margin:0 0 8px">這些設備由他負責保管與借出，不算在個人名下資產。建議每半年產生一次「負責設備盤點單」請他簽名確認。</p>
+      <div class="list" style="max-height:260px;overflow:auto">${cust.map(a=>`<div class="li"><span class="tag">${esc(a.tag)}</span><span class="grow">${esc(a.name)}</span><span class="st ${a.status}">${STATUS[a.status]}</span></div>`).join("")}</div>
+      ${isAdmin()?`<div class="row" style="margin-top:10px"><button class="btn sm primary" data-act="newCustodySo" data-id="${esc(id)}">產生負責設備盤點單</button></div>`:""}`:""}
     ${used.length?`<div class="sec">過去使用過的設備（${used.length}）</div><div class="list">${used.map(u=>`<div class="li"><span class="tag">${esc((u.assets||{}).tag||"")}</span><span class="grow">${esc((u.assets||{}).name||"")}<span class="muted small">　${u.kind==="borrow"?"借用":"領用"}</span></span><span class="num muted">${fmtD(u.start_date)} – ${fmtD(u.end_date)}</span></div>`).join("")}</div>`:""}
     ${sos.length?`<div class="sec">簽收紀錄</div><div class="list">${sos.map(s=>{const st=soStatus(s);return `<div class="li" style="cursor:pointer" data-act="openSo" data-id="${esc(s.id)}"><span class="num">${esc(s.no)}</span><span class="grow muted small">${SO_SHORT[s.type]}・${s.items.length} 項・${fmtD(s.created_at)}</span><span class="stamp ${st.k}">${st.label}</span></div>`;}).join("")}</div>`:""}`:""}`;
   const foot=isAdmin()?`<button class="btn primary" data-act="saveEmp" data-id="${esc(id||"")}">${e?"儲存變更":"新增員工"}</button>${e?`<button class="btn danger" data-act="delEmp" data-id="${esc(id)}" style="margin-left:auto">刪除</button>`:""}`:"";
@@ -992,8 +1007,19 @@ async function openSo(id){
 function appLink(){ return S.cfg.app_url || (location.origin+location.pathname); }
 function slackMsg(s){
   // 手動貼到 Slack 時 <@ID> 不會變成標記，所以直接用姓名開頭（私訊本人即可收到通知）
-  const due=s.items.map(it=>it.due).filter(Boolean).sort()[0];
-  return `${s.employee_name} 你好，你有一張設備簽收單（共 ${s.items.length} 項設備）${due?`，借用設備請於 ${due} 前歸還`:""}，請用公司 Email 帳號登入，確認設備並線上簽名：\n${appLink()}`;
+  const due=s.items.map(it=>it.due).filter(Boolean).sort()[0], mail=s.signer_email||"你的公司 Email";
+  return [
+    `${s.employee_name} 你好，你有一張設備簽收單（共 ${s.items.length} 項設備）${due?`，借用設備請於 ${due} 前歸還`:""}，請用公司 Email 帳號登入，確認設備並線上簽名：`,
+    appLink(), "",
+    "【操作步驟】",
+    `1. 點上方連結，輸入 ${mail}，按「寄送登入信」（按一次就好）`,
+    "2. 到公司信箱找一封英文信「Confirm your email address」（寄件者 Supabase Auth，不是詐騙信），點信中的「Confirm email address」就會自動登入",
+    "3. 在「我的資產」按「查看並簽名」，核對設備後勾選確認、簽名，再按「確認簽收」",
+    "",
+    "※ 手機也可以操作",
+    "※ 收不到信請先看垃圾郵件匣；寄出後 60 秒內不能重寄，請不要一直重按",
+    "※ 若顯示「暫時寄不出登入信」，請 10 分鐘後再試，一直不行請私訊 Admin"
+  ].join("\n");
 }
 async function copyText(t,ok){ try{ await navigator.clipboard.writeText(t); toast(ok||"已複製"); }catch{ const ta=document.createElement("textarea"); ta.value=t; document.body.append(ta); ta.select(); try{ document.execCommand("copy"); toast(ok||"已複製"); }catch{ toast("無法自動複製，請手動選取文字","err"); } ta.remove(); } }
 async function copyAllSlack(){
@@ -1018,11 +1044,11 @@ table{width:100%;border-collapse:collapse;margin:8px 0 14px}th,td{border:1px sol
 ${co?`<div class="co">${co}</div>`:""}<h1>${esc(SO_TYPE[s.type])}</h1>
 <div class="meta"><span>單號：${esc(s.no)}</span><span>製表日期：${fmtD(s.created_at)}</span></div>
 <table><tr><th style="width:16%">員工編號</th><td>${esc(s.emp_no)}</td><th style="width:16%">姓名</th><td>${esc(s.employee_name)}</td></tr><tr><th>部門</th><td>${esc(s.dept)}</td><th>到職日</th><td>${esc(hire)}</td></tr></table>
-<table><thead><tr><th style="width:4%">序</th><th>資產編號</th><th>名稱</th><th>品牌／型號／系統</th>${hasSince?'<th>領用日</th>':""}${hasDue?'<th>預計歸還</th>':""}</tr></thead><tbody>
-${s.items.map((it,i)=>`<tr><td class="nw">${i+1}</td><td class="nw">${esc(it.tag)}</td><td class="nw">${esc(it.name)}</td><td>${esc(it.bm)}</td>${hasSince?`<td class="nw">${esc(it.since||"")}</td>`:""}${hasDue?`<td class="nw">${esc(it.due||"")}</td>`:""}</tr>`).join("")}</tbody></table>
-<div class="terms">${esc(S.cfg.terms)}</div>
-<p style="font-size:11pt">本人已確認上列設備之品項、數量與狀況無誤，並同意遵守上述保管規範${s.type==="borrow"?"，且將於預計歸還日前歸還":""}。</p>
-<div class="sign"><div class="box"><div class="lab">員工簽名：</div><div class="line">${sigSvg(s.signature)}</div>
+<table><thead><tr><th style="width:4%">序</th><th>資產編號</th><th>名稱</th><th>品牌／型號／系統</th>${hasSince?(s.type==="custody"?'<th>目前狀態</th>':'<th>領用日</th>'):""}${hasDue?'<th>預計歸還</th>':""}</tr></thead><tbody>
+${s.items.map((it,i)=>`<tr><td class="nw">${i+1}</td><td class="nw">${esc(it.tag)}</td><td class="nw">${esc(it.name)}</td><td>${esc(it.bm)}</td>${hasSince?`<td class="nw">${esc(s.type==="custody"?(it.state||""):(it.since||""))}</td>`:""}${hasDue?`<td class="nw">${esc(it.due||"")}</td>`:""}</tr>`).join("")}</tbody></table>
+<div class="terms">${esc(s.type==="custody"?CUSTODY_TERMS:S.cfg.terms)}</div>
+<p style="font-size:11pt">${s.type==="custody"?"本人已確認上列設備之品項、數量與狀況無誤，並負責後續保管與借出管理。":`本人已確認上列設備之品項、數量與狀況無誤，並同意遵守上述保管規範${s.type==="borrow"?"，且將於預計歸還日前歸還":""}。`}</p>
+<div class="sign"><div class="box"><div class="lab">${s.type==="custody"?"負責人簽名：":"員工簽名："}</div><div class="line">${sigSvg(s.signature)}</div>
 <div class="dt">${st.at?`簽署時間：${fmtDT(st.at)}${st.k==="signed"?"（線上簽署）":""}`:"日期：　　　年　　月　　日"}</div>
 ${st.k==="signed"||st.k==="paper"?`<div class="seal">已簽收<small>${fmtD(st.at)}</small></div>`:""}</div>
 <div class="box"><div class="lab">Admin：</div><div class="line">${s.cs?sigSvg(s.cs.signature):""}</div><div class="dt">${s.cs?`${esc(s.cs.signer_name)}・簽署時間：${fmtDT(s.cs.signed_at)}`:"日期：　　　年　　月　　日"}</div></div></div>
@@ -1124,6 +1150,53 @@ async function archiveNow(id,overwrite){
   catch(e){ toast("存檔失敗："+(dbErr(e)||e.message||e),"err"); }
 }
 
+
+/* ================= 負責人：負責設備的借出與歸還 ================= */
+function custodyHTML(cust,loans,hasPend){
+  const lent=cust.filter(a=>loans.has(a.id)).length, today=todayStr();
+  const row=a=>{ const l=loans.get(a.id), over=l&&l.due_date&&l.due_date<today;
+    const state = l ? `<span class="small">借給 <b>${esc(l.borrower_name)}</b>${l.due_date?`<span class="due ${over?"over":""}" style="margin-left:8px">${over?"已逾期，":""}${esc(l.due_date.replace(/-/g,"/"))} 前歸還</span>`:""}</span>`
+                    : `<span class="small muted">${a.status==="available"?"在庫":STATUS[a.status]}${a.location?"・"+esc(a.location):""}</span>`;
+    const btn = l ? `<button class="btn sm" data-act="custReturn" data-id="${esc(a.id)}">登記歸還</button>`
+                  : a.status==="available" ? `<button class="btn sm primary" data-act="custLend" data-id="${esc(a.id)}">借出</button>` : "";
+    return `<div class="li"><span class="tag">${esc(a.tag)}</span><span class="grow">${esc(a.name)}<span class="l2" style="display:block;margin-top:2px">${state}</span></span>${btn}</div>`; };
+  return `<div class="sec row" style="justify-content:space-between;margin-top:${hasPend?22:4}px"><span>我負責的設備（${cust.length}）</span><span class="small muted">借出中 ${lent}・在庫 ${cust.length-lent}</span></div>
+    <p class="small muted" style="margin:0 0 8px">這些設備由你負責保管與借出，不算在你的個人資產。借給同事或廠商時，請在這裡登記借出；收回後按「登記歸還」。</p>
+    <div class="list" style="max-width:900px">${cust.map(row).join("")}</div>`;
+}
+async function custLend(assetId){
+  if(!S.dirLoaded){
+    try{ const d=await q(S.sb.rpc("custody_directory")); d.forEach(e=>{ if(!S.emps.has(e.id)) S.emps.set(e.id,{...e,active:true}); }); S.dirLoaded=true; }
+    catch(e){ toast(dbErr(e),"err"); return; }
+  }
+  const a=(S.custAssets||[]).find(x=>x.id===assetId)||{};
+  modal(`<h2>借出設備</h2><p class="small muted" style="margin:0 0 12px"><span class="tag">${esc(a.tag||"")}</span> ${esc(a.name||"")}</p>
+    <form class="form" id="lf" autocomplete="off">
+      <label class="full">借用人（公司同仁）${empPicker("borrower_id","")}</label>
+      <label class="full">或直接輸入借用人姓名（外部人員、廠商）<input class="in" name="borrower_name" placeholder="選填"></label>
+      <label>預計歸還日（選填）<input class="in" type="date" name="due"></label>
+      <label>備註<input class="in" name="note" placeholder="例：QA 測試用"></label>
+    </form>
+    <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" data-close>取消</button><button class="btn primary" id="lendGo">確認借出</button></div>`);
+  bindEmpPickers($("#lf"));
+  $("#lendGo").onclick=async()=>{
+    const fd=Object.fromEntries(new FormData($("#lf")).entries());
+    if(!fd.borrower_id && !String(fd.borrower_name||"").trim()){ toast("請選擇或輸入借用人","err"); return; }
+    $("#lendGo").disabled=true;
+    try{ await run(()=>q(S.sb.rpc("custody_lend",{p_asset:assetId,p_borrower:fd.borrower_id||null,p_borrower_name:String(fd.borrower_name||"").trim()||null,p_due:fd.due||null,p_note:String(fd.note||"").trim()})),"已登記借出");
+         closeModal(); viewMine(); }
+    catch{ $("#lendGo").disabled=false; }
+  };
+}
+function custReturn(assetId){
+  const a=(S.custAssets||[]).find(x=>x.id===assetId)||{};
+  confirmBox("登記歸還？",`確認已收回 ${a.tag||""} ${a.name||""}，並檢查過外觀與配件。`,"登記歸還",
+    async()=>{ await run(()=>q(S.sb.rpc("custody_return",{p_asset:assetId,p_note:""})),"已登記歸還"); viewMine(); });
+}
+async function newCustodySo(empId){
+  try{ const newId=await run(()=>q(S.sb.rpc("create_custody_signoff",{p_employee:empId})),"已產生負責設備盤點單"); refreshCounts(); openSo(newId); }catch{}
+}
+
 /* ================= MINE ================= */
 async function viewMine(){
   const c=$("#content"), me=S.me;
@@ -1132,11 +1205,18 @@ async function viewMine(){
   if(!c.innerHTML) c.innerHTML="<div class='loading'>載入中…</div>";
   let mine, sos; try{ [mine,sos]=await Promise.all([q(S.sb.from("assets").select("*").eq("holder_id",me.id).order("tag").limit(500)), q(S.sb.from("signoffs").select(SO_COLS).eq("employee_id",me.id).order("created_at",{ascending:false}).limit(100))]); }
   catch(e){ c.innerHTML=`<div class="notice"><h3>無法載入</h3><p class="muted">${esc(dbErr(e))}</p></div>`; return; }
+  let cust=[], loans=new Map();
+  if(S.hasCust){
+    const {data}=await S.sb.from("assets").select("id,tag,name,brand,model,status,location").eq("custodian_id",me.id).order("tag").limit(1000); cust=data||[];
+    if(cust.length){ const {data:ls}=await S.sb.from("custody_loans").select("*").is("returned_at",null).in("asset_id",cust.map(a=>a.id)); (ls||[]).forEach(l=>loans.set(l.asset_id,l)); }
+  }
+  S.custAssets=cust;
   if(S.view!=="mine") return;
   const pend=sos.filter(s=>soStatus(s).k==="pending"&&s.signer_email&&s.signer_email.toLowerCase()===S.email), done=sos.filter(s=>!pend.includes(s)&&!s.voided);
   S.myPending=pend.length; renderNav();
   c.innerHTML=`${pend.map(s=>`<div class="pend"><div class="grow"><div class="stamp pending">待你簽收</div><h3 style="margin:8px 0 2px;font-size:16px">${SO_TYPE[s.type]}</h3><div class="muted small"><span class="num">${esc(s.no)}</span>・${s.items.length} 項設備・${fmtD(s.created_at)} 建立</div></div><button class="btn primary" data-act="signSo" data-id="${esc(s.id)}">查看並簽名</button></div>`).join("")}
-    <div class="sec" style="margin-top:${pend.length?22:4}px">保管中的設備（${mine.length}）</div>
+    ${cust.length?custodyHTML(cust,loans,pend.length):""}
+    <div class="sec" style="margin-top:${pend.length||cust.length?22:4}px">保管中的設備（${mine.length}）</div>
     ${mine.length?`<div class="cards">${mine.map(a=>`<div class="card">${a.photos&&a.photos[0]?`<img class="cph" src="${esc(photoUrl(a.photos[0].p))}" data-full="${esc(photoUrl(a.photos[0].p))}" alt="" loading="lazy">`:""}<span class="tag">${esc(a.tag)}</span><h3>${esc(a.name)}</h3><div class="muted small">${esc([a.brand,a.model,a.os].filter(Boolean).join(" "))}${a.serial?`<br>S/N ${esc(a.serial)}`:""}${a.assigned_date?`<br>領用日 ${esc(a.assigned_date.replace(/-/g,"/"))}`:""}</div><div style="margin-top:6px" class="row"><span class="st ${a.status}">${STATUS[a.status]}</span>${a.status==="borrowed"&&a.due_date?`<span class="due ${isOver(a)?"over":""}">${isOver(a)?"已逾期，":""}請於 ${esc(a.due_date)} 前歸還</span>`:""}</div></div>`).join("")}</div>`:`<p class="muted">目前沒有登記在你名下的設備。</p>`}
     ${done.length?`<div class="sec">簽收紀錄</div><div class="list" style="max-width:760px">${done.map(s=>{const st=soStatus(s);return `<div class="li"><span class="num">${esc(s.no)}</span><span class="grow muted small">${SO_SHORT[s.type]}・${s.items.length} 項・${fmtD(s.created_at)}</span><span class="stamp ${st.k}">${st.label}</span><button class="btn sm ghost" data-act="dlMine" data-id="${esc(s.id)}">下載</button></div>`;}).join("")}</div>`:""}`;
 }
@@ -1144,7 +1224,7 @@ async function signSo(id){
   let s; try{ s=await q(S.sb.from("signoffs").select(SO_COLS).eq("id",id).single()); }catch(e){ toast(dbErr(e),"err"); return; }
   modal(`<h2>${SO_TYPE[s.type]}</h2><div class="muted small" style="margin-bottom:12px"><span class="num">${esc(s.no)}</span>・${esc(s.employee_name)}（${esc(s.emp_no)}）</div>
   <div class="list">${s.items.map((it,i)=>`<div class="li"><span class="num muted">${i+1}</span><span class="tag">${esc(it.tag)}</span><span class="grow">${esc(it.name)}<span class="muted small"> ${esc(it.bm)}${it.serial?" ・S/N "+esc(it.serial):""}${it.since?"・"+esc(it.since.replace(/-/g,"/"))+" 領用":""}</span></span>${it.due?`<span class="due">應還 ${esc(it.due)}</span>`:""}</div>`).join("")}</div>
-  <div class="sec">保管規範</div><div class="terms">${esc(S.cfg.terms)}</div>
+  <div class="sec">保管規範</div><div class="terms">${esc(s.type==="custody"?CUSTODY_TERMS:S.cfg.terms)}</div>
   <label class="row" style="margin:14px 0 10px;font-size:14px"><input type="checkbox" id="agree"> 我已確認上列設備的品項、數量與狀況無誤，並同意遵守保管規範。</label>
   <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="small muted">請在框內簽名</span><button class="btn sm ghost" id="sigClear">重寫</button></div>
   <div class="sigwrap"><canvas id="sigc"></canvas><div class="hint" id="sigHint">用滑鼠或手指在此簽名</div></div>
@@ -1277,14 +1357,14 @@ async function addRole(){
 function delRole(email){ confirmBox(`移除 ${email}？`,"移除後他將失去管理權限（若他也是員工，仍可登入查看自己的設備）。","移除",async()=>{ await run(()=>q(S.sb.from("roles").delete().eq("email",email)),"已移除"); viewSettings(); },true); }
 
 /* ================= CSV / backup ================= */
-const A_CSV=[["資產編號","tag"],["名稱","name"],["類別","cat"],["品牌","brand"],["型號","model"],["序號","serial"],["作業系統","os"],["狀態","_status"],["預計歸還","due_date"],["保管人員工編號","_empNo"],["保管人","holder_name"],["原保管人（遺失／報廢）","_last"],["領用日","assigned_date"],["存放位置","location"],["購入日期","purchase_date"],["保固到期","warranty_end"],["購入金額","cost"],["供應商","vendor"],["採購人","purchaser"],["發票號碼","invoice_no"],["耐用年數","life_years"],["預估殘值","salvage"],["備註","note"]];
+const A_CSV=[["資產編號","tag"],["名稱","name"],["類別","cat"],["品牌","brand"],["型號","model"],["序號","serial"],["作業系統","os"],["狀態","_status"],["預計歸還","due_date"],["保管人員工編號","_empNo"],["保管人","holder_name"],["負責人員工編號","_custNo"],["原保管人（遺失／報廢）","_last"],["領用日","assigned_date"],["存放位置","location"],["購入日期","purchase_date"],["保固到期","warranty_end"],["購入金額","cost"],["供應商","vendor"],["採購人","purchaser"],["發票號碼","invoice_no"],["耐用年數","life_years"],["預估殘值","salvage"],["備註","note"]];
 const E_CSV=[["員工編號","emp_no"],["姓名","name"],["部門","dept"],["到職日","hire_date"],["Email","email"],["Slack ID","slack_id"],["在職","_active"]];
 const cell=v=>{ v=String(v??""); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v; };
 const toCSV=(cols,rows)=>"\ufeff"+[cols.map(c=>c[0]).join(","),...rows.map(r=>cols.map(c=>cell(r[c[1]])).join(","))].join("\n");
 async function exportAssets(){
   toast("正在準備檔案…");
-  const rows=await run(()=>fetchAll(()=>S.sb.from("assets").select("tag,name,cat,brand,model,serial,os,status,due_date,holder_id,holder_name,last_holder_name,assigned_date,location,purchase_date,warranty_end,cost,vendor,purchaser,invoice_no,life_years,salvage,note").order("tag")));
-  download(`資產清單_${todayStr()}.csv`, toCSV(A_CSV, rows.map(a=>({...a,_status:STATUS[a.status],_empNo:(S.emps.get(a.holder_id)||{}).emp_no||"",_last:GONE.has(a.status)?a.last_holder_name:""}))), "text/csv;charset=utf-8");
+  const rows=await run(()=>fetchAll(()=>S.sb.from("assets").select("tag,name,cat,brand,model,serial,os,status,due_date,holder_id,holder_name,last_holder_name,assigned_date,location,purchase_date,warranty_end,cost,vendor,purchaser,invoice_no,life_years,salvage,note"+(S.hasCust?",custodian_id":"")).order("tag")));
+  download(`資產清單_${todayStr()}.csv`, toCSV(A_CSV, rows.map(a=>({...a,_status:STATUS[a.status],_empNo:(S.emps.get(a.holder_id)||{}).emp_no||"",_last:GONE.has(a.status)?a.last_holder_name:"",_custNo:(S.emps.get(a.custodian_id)||{}).emp_no||""}))), "text/csv;charset=utf-8");
 }
 function exportEmps(){ download(`員工清單_${todayStr()}.csv`, toCSV(E_CSV, Array.from(S.emps.values()).map(e=>({...e,_active:e.active?"是":"否"}))), "text/csv;charset=utf-8"); }
 async function exportSos(){
@@ -1349,6 +1429,7 @@ function importCSV(kind){
           holder_id:emp?emp.id:null,due_date:status==="borrowed"?due:null,location:r["存放位置"]||"",purchase_date:dt(r["購入日期"]||""),warranty_end:dt(r["保固到期"]||""),
           cost:r["購入金額"]?(Number(r["購入金額"].replace(/[^\d.]/g,""))||null):null,note:r["備註"]||"",
           ...(hasSince?{assigned_date:emp?dt(r["領用日"]||""):null}:{}),
+          ...(S.hasCust&&has("負責人員工編號")?{custodian_id:(r["負責人員工編號"]&&byNo.get(r["負責人員工編號"].toLowerCase())||{}).id||null}:{}),
           ...(has("供應商")?{vendor:r["供應商"]||""}:{}), ...(has("採購人")?{purchaser:r["採購人"]||""}:{}), ...(has("發票號碼")?{invoice_no:r["發票號碼"]||""}:{}),
           ...(has("耐用年數")?{life_years:(Number(r["耐用年數"])>0?Number(r["耐用年數"]):null)}:{}),
           ...(has("預估殘值")?{salvage:(r["預估殘值"]!==""&&!isNaN(Number(r["預估殘值"].replace(/[^\d.]/g,"")))&&r["預估殘值"].replace(/[^\d.]/g,"")!==""?Number(r["預估殘值"].replace(/[^\d.]/g,"")):null)}:{})}; });
@@ -1420,6 +1501,9 @@ document.addEventListener("click", async e=>{
     case "voidSo": confirmBox("作廢這張簽收單？","作廢後員工將無法再簽署此單，紀錄會保留。","作廢",async()=>{ await run(()=>q(S.sb.from("signoffs").update({voided:true}).eq("id",id)),"已作廢"); refreshCounts(); updSos(true); openSo(id); },true); break;
     case "delSo": confirmBox("刪除這張簽收單？","已作廢的簽收單將永久刪除，無法復原。","刪除",async()=>{ await run(()=>q(S.sb.from("signoffs").delete().eq("id",id)),"已刪除"); closeDrawer(); updSos(true); },true,soCache&&soCache.no); break;
     case "signSo": signSo(id); break;
+    case "custLend": custLend(id); break;
+    case "custReturn": custReturn(id); break;
+    case "newCustodySo": newCustodySo(id); break;
     case "adminSign": adminSign(id); break;
     case "saveCfg": saveCfg(); break;
     case "addRole": addRole(); break;
@@ -1559,6 +1643,7 @@ async function boot(){
   if(!S.role){ screen(`<h1>尚未開通</h1><p class="muted">${esc(S.email)} 還沒有使用權限。請通知行政部在員工資料中填入你的公司 Email。</p><button class="btn" data-act="logout">改用其他 Email 登入</button>`); return; }
   try{ const [cfg]=await Promise.all([q(S.sb.from("settings").select("*").eq("id",1).single()), loadEmps()]); S.cfg=cfg; }
   catch(e){ toast(dbErr(e),"err"); }
+  { const {error}=await S.sb.from("assets").select("custodian_id").limit(1); S.hasCust=!error; if(S.hasCust) A_COLS+=",custodian_id,custodian_name"; }
   shell(); await refreshCounts();
   go(isStaff()?"assets":"mine");
   if(isAdmin()) setTimeout(catchUpArchives, 4000);   // 補存還沒存檔的已簽收單
