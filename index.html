@@ -624,16 +624,32 @@ async function openAsset(id){
   });
   if(a) renderPhotos(); else setTimeout(()=>$("#af [name=name]").focus(),230);
 }
+// 跳出選項讓使用者選擇，回傳選到的序號；按取消回傳 null
+function askChoice(title,msg,opts){
+  return new Promise(res=>{
+    modal(`<h2>${title}</h2><p class="small muted" style="margin:0 0 14px">${msg}</p>
+      <div style="display:flex;flex-direction:column;gap:8px">${opts.map((o,i)=>`<button class="btn ${i?"":"primary"}" data-ch="${i}" style="text-align:left;justify-content:flex-start;white-space:normal;height:auto;padding:10px 14px">${o}</button>`).join("")}</div>
+      <div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn ghost" id="chCancel">取消</button></div>`);
+    document.querySelectorAll("[data-ch]").forEach(b=>b.onclick=()=>{ closeModal(); res(+b.dataset.ch); });
+    $("#chCancel").onclick=()=>{ closeModal(); res(null); };
+  });
+}
 async function saveAsset(id){
   const f=$("#af"); if(!f.reportValidity()) return;
   const fd=Object.fromEntries(new FormData(f).entries()); for(const k in fd) fd[k]=String(fd[k]).trim();
-  if((fd.status==="in_use"||fd.status==="borrowed") && !fd.holder_id){ toast(`狀態為「${STATUS[fd.status]}」時請選擇${fd.status==="borrowed"?"借用人":"保管人"}`,"err"); return; }
+  if((fd.status==="borrowed"||(fd.status==="in_use"&&!fd.custodian_id)) && !fd.holder_id){ toast(`狀態為「${STATUS[fd.status]}」時請選擇${fd.status==="borrowed"?"借用人":"保管人（或指定負責人）"}`,"err"); return; }
   if(fd.status==="borrowed" && !fd.due_date){ toast("請填寫預計歸還日","err"); f.due_date.focus(); return; }
   const data={...fd}; for(const k of ["holder_id","last_holder_id","custodian_id","due_date","assigned_date","purchase_date","warranty_end"]) data[k]=data[k]||null;
   if(!S.hasCust) delete data.custodian_id;
-  if(data.custodian_id&&data.holder_id===data.custodian_id){   // 負責的設備不算個人名下
-    data.holder_id=null; if(data.status==="in_use"||data.status==="borrowed"){ data.status="available"; data.due_date=null; } data.assigned_date=null;
-    toast("負責人和保管人相同：已清空保管人，這台設備改列在他的「負責的設備」");
+  if(data.custodian_id&&data.holder_id===data.custodian_id){   // 負責人＝保管人：請管理員選擇要怎麼登記，不自動改
+    const nm=(S.emps.get(data.custodian_id)||{}).name||"這位同仁";
+    const ch=await askChoice("負責人和保管人是同一個人",
+      `${esc(nm)} 同時被設為這台設備的「負責人」和「保管人／借用人」，請選擇要怎麼登記：`,
+      ["他負責管理的設備：列在「負責的設備」，不算個人名下（狀態：使用中）",
+       `借給他個人使用：列在他的「名下資產」（${STATUS[data.status]||""}），取消負責人`]);
+    if(ch===null) return;
+    if(ch===0){ data.holder_id=null; if(data.status==="in_use"||data.status==="borrowed"){ data.status="in_use"; data.due_date=null; } data.assigned_date=null; }
+    else data.custodian_id=null;
   }
   if(!GONE.has(data.status)) delete data.last_holder_id;   // 只有遺失／報廢時由畫面指定，其餘由系統自動記錄
   data.cost = fd.cost===""?null:Number(fd.cost);
@@ -1282,14 +1298,14 @@ async function archiveNow(id,overwrite){
 
 /* ================= 負責人：負責設備的借出與歸還 ================= */
 function custodyHTML(cust,loans,hasPend){
-  const lent=cust.filter(a=>loans.has(a.id)).length, today=todayStr();
+  const lent=cust.filter(a=>loans.has(a.id)).length, today=todayStr();   // 「在庫」指沒有借出的數量
   const row=a=>{ const l=loans.get(a.id), over=l&&l.due_date&&l.due_date<today;
     const state = l ? `<span class="small">借給 <b>${esc(l.borrower_name)}</b>${l.due_date?`<span class="due ${over?"over":""}" style="margin-left:8px">${over?"已逾期，":""}${esc(l.due_date.replace(/-/g,"/"))} 前歸還</span>`:""}</span>`
-                    : `<span class="small muted">${a.status==="available"?"在庫":STATUS[a.status]}${a.location?"・"+esc(a.location):""}</span>`;
+                    : `<span class="small muted">${a.status==="available"?"在庫":STATUS[a.status]}（未借出）${a.location?"・"+esc(a.location):""}</span>`;
     const btn = l ? `<button class="btn sm" data-act="custReturn" data-id="${esc(a.id)}">登記歸還</button>`
-                  : a.status==="available" ? `<button class="btn sm primary" data-act="custLend" data-id="${esc(a.id)}">借出</button>` : "";
+                  : (a.status==="available"||a.status==="in_use") ? `<button class="btn sm primary" data-act="custLend" data-id="${esc(a.id)}">借出</button>` : "";
     return `<div class="li"><span class="tag">${esc(a.tag)}</span><span class="grow">${esc(a.name)}<span class="l2" style="display:block;margin-top:2px">${state}</span></span>${btn}</div>`; };
-  return `<div class="sec row" style="justify-content:space-between;margin-top:${hasPend?22:4}px"><span>我負責的設備（${cust.length}）</span><span class="small muted">借出中 ${lent}・在庫 ${cust.length-lent}</span></div>
+  return `<div class="sec row" style="justify-content:space-between;margin-top:${hasPend?22:4}px"><span>我負責的設備（${cust.length}）</span><span class="small muted">借出中 ${lent}・未借出 ${cust.length-lent}</span></div>
     <p class="small muted" style="margin:0 0 8px">這些設備由你負責保管與借出，不算在你的個人資產。借給同事或廠商時，請在這裡登記借出；收回後按「登記歸還」。</p>
     <div class="list" style="max-width:900px">${cust.map(row).join("")}</div>`;
 }
@@ -1552,8 +1568,9 @@ function importCSV(kind){
     let recs, missing=0; const has=k=>rows.length && Object.prototype.hasOwnProperty.call(rows[0],k); const hasSince=has("領用日");
     if(isA){
       recs=rows.map(r=>{ const emp=r["保管人員工編號"]?byNo.get(r["保管人員工編號"].toLowerCase()):null; if(r["保管人員工編號"]&&!emp) missing++;
-        let status=STATUS_REV[r["狀態"]]||(STATUS[r["狀態"]]?r["狀態"]:(emp?"in_use":"available"));
-        const due=dt(r["預計歸還"]||""); if(status==="borrowed"&&!due) status=emp?"in_use":"available"; if(HELD.has(status)&&status!=="repair"&&!emp) status="available";
+        const cust=S.hasCust&&has("負責人員工編號")&&r["負責人員工編號"]?byNo.get(r["負責人員工編號"].toLowerCase()):null;
+        let status=STATUS_REV[r["狀態"]]||(STATUS[r["狀態"]]?r["狀態"]:(emp||cust?"in_use":"available"));
+        const due=dt(r["預計歸還"]||""); if(status==="borrowed"&&!due) status=emp||cust?"in_use":"available"; if(HELD.has(status)&&status!=="repair"&&!emp&&!(cust&&status==="in_use")) status=cust?"in_use":"available";
         return {tag:r["資產編號"],name:r["名稱"]||r["資產編號"],cat:r["類別"]||"其他",brand:r["品牌"]||"",model:r["型號"]||"",serial:r["序號"]||"",os:r["作業系統"]||"",status,
           holder_id:emp?emp.id:null,due_date:status==="borrowed"?due:null,location:r["存放位置"]||"",purchase_date:dt(r["購入日期"]||""),warranty_end:dt(r["保固到期"]||""),
           cost:r["購入金額"]?(Number(r["購入金額"].replace(/[^\d.]/g,""))||null):null,note:r["備註"]||"",
@@ -1563,7 +1580,7 @@ function importCSV(kind){
           ...(has("耐用年數")?{life_years:(Number(r["耐用年數"])>0?Number(r["耐用年數"]):null)}:{}),
           ...(has("預估殘值")?{salvage:(r["預估殘值"]!==""&&!isNaN(Number(r["預估殘值"].replace(/[^\d.]/g,"")))&&r["預估殘值"].replace(/[^\d.]/g,"")!==""?Number(r["預估殘值"].replace(/[^\d.]/g,"")):null)}:{})}; });
       // 負責人就是保管人時（測試機等），不算個人名下：清空保管人、改為在庫可用
-      recs.forEach(x=>{ if(x.custodian_id&&x.holder_id===x.custodian_id){ x.holder_id=null; if(x.status==="in_use"||x.status==="borrowed"){ x.status="available"; x.due_date=null; } if("assigned_date" in x) x.assigned_date=null; } });
+      recs.forEach(x=>{ if(x.custodian_id&&x.holder_id===x.custodian_id){ x.holder_id=null; if(x.status==="in_use"||x.status==="borrowed"){ x.status="in_use"; x.due_date=null; } if("assigned_date" in x) x.assigned_date=null; } });
     } else {
       recs=rows.map(r=>({emp_no:r["員工編號"],name:r["姓名"]||r["員工編號"],dept:r["部門"]||"",email:(r["Email"]||"").toLowerCase()||null,slack_id:r["Slack ID"]||"",active:r["在職"]?!/否|離職|no|false/i.test(r["在職"]):true,
         ...(S.hasHire&&rows.length&&Object.prototype.hasOwnProperty.call(rows[0],"到職日")?{hire_date:dt(String(r["到職日"]||"").trim())}:{})}));
