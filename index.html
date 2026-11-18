@@ -217,6 +217,8 @@ textarea.in{resize:vertical;min-height:90px;line-height:1.6}
 .prog i{display:block;height:100%;background:var(--green);width:0;transition:width .2s}
 
 /* signature */
+.sign-page{grid-template-columns:minmax(0,1fr);padding:12px}.login-box.sign-box{width:min(520px,100%);box-sizing:border-box;justify-self:center;padding:22px 18px}.sign-box .row{flex-wrap:nowrap;gap:8px}.sign-box .list .li{align-items:flex-start}.sign-items .li{display:block}.held{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}.held summary{cursor:pointer;font-weight:600;font-size:14px}.sign-items .it-body{margin:4px 0 0 22px;white-space:normal;overflow-wrap:anywhere}.sign-box .small.muted{white-space:normal}
+.qrbox{display:flex;justify-content:center}.qrbox svg{width:min(260px,70vw);height:auto;background:#fff;padding:6px;border-radius:8px}
 .sigwrap{border:1.5px dashed var(--ink-2);border-radius:8px;background:#fff;position:relative;touch-action:none}
 .sigwrap canvas{display:block;width:100%;height:180px;cursor:crosshair}
 .sigwrap .hint{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:#9aa;pointer-events:none;font-size:14px}
@@ -294,7 +296,7 @@ const SALVAGE_MODE = {tax:"稅法算法：成本 ÷（耐用年數＋1）", perc
 const MAX_PHOTOS = 6, PAGE = 100, BUCKET = "asset-photos";
 let A_COLS = "id,tag,name,cat,brand,model,os,status,holder_id,holder_name,last_holder_name,due_date,assigned_date,location,updated_at,photos";   // 執行 update-2026-10g 後會加上負責人欄位
 const GONE = new Set(["lost","retired"]);
-const SO_COLS = "id,no,type,employee_id,employee_name,emp_no,dept,signer_email,items,created_at,voided,paper_signed_at,signed_at";
+let SO_COLS = "id,no,type,employee_id,employee_name,emp_no,dept,signer_email,items,created_at,voided,paper_signed_at,signed_at";   // 執行 update-2026-11b 後會加上簽署方式欄位
 
 /* ================= state ================= */
 const S = {
@@ -986,7 +988,7 @@ async function openSo(id){
   await attachCs(s);
   const body=`<div class="row" style="justify-content:space-between;align-items:flex-start"><dl class="kv">
     <dt>類型</dt><dd>${SO_TYPE[s.type]}</dd><dt>員工</dt><dd>${esc(s.employee_name)}（${esc(s.emp_no)}）${esc(s.dept)}</dd>
-    <dt>建立</dt><dd class="num">${fmtDT(s.created_at)}</dd><dt>簽收方式</dt><dd>${s.signer_email?"線上簽名":"紙本簽名"}</dd>
+    <dt>建立</dt><dd class="num">${fmtDT(s.created_at)}</dd><dt>簽收方式</dt><dd>${s.signed_via==="link"?"專屬連結簽署":s.signed_via==="qr"?`當面掃碼簽署（見證人：${esc(s.witness_name||"")}）`:s.signed_at?"登入線上簽名":s.paper_signed_at?"紙本簽名":S.hasLinks?"專屬連結（或紙本）":(s.signer_email?"線上簽名":"紙本簽名")}</dd>
     ${st.at?`<dt>簽收時間</dt><dd class="num">${fmtDT(st.at)}</dd>`:""}</dl>
     ${st.k==="signed"||st.k==="paper"?`<div class="seal">已簽收<span>${fmtD(st.at)}</span></div>`:`<span class="stamp ${st.k}">${st.label}</span>`}</div>
     <div class="sec">設備明細（${s.items.length} 項）</div>
@@ -995,16 +997,31 @@ async function openSo(id){
     ${done&&!s.csMissing?`<div class="sec row" style="justify-content:space-between"><span>Admin 簽名</span>${isAdmin()?`<button class="btn sm${s.cs?" ghost":""}" data-act="adminSign" data-id="${esc(id)}">${s.cs?"重新簽名":"Admin 簽名"}</button>`:""}</div>
       ${s.cs?`<div class="sigimg">${sigSvg(s.cs.signature)}</div><p class="small muted" style="margin:6px 0 0">${esc(s.cs.signer_name)}・${fmtDT(s.cs.signed_at)}</p>`:`<p class="small muted" style="margin:0">尚未簽名。任一位資產管理員都可以簽。</p>`}`:""}
     ${done?`<div class="sec">PDF 存檔</div>${archiveHTML(s,ar.data,ar.error)}`:""}
-    ${st.k==="pending"&&s.signer_email?`<div class="sec">通知員工簽收</div><p class="small muted">複製下方訊息貼到 Slack 私訊給員工，員工點連結登入即可線上簽名。</p><textarea class="in" readonly rows="6">${esc(slackMsg(s))}</textarea>`:""}`;
+    ${st.k==="pending"&&S.hasLinks&&isAdmin()?`<div class="sec">通知員工簽收</div><p class="small muted">複製下方訊息貼到 Slack 私訊給員工，員工點連結就能簽名，不用登入。當面點交時可以按「當面掃碼簽名」。</p><textarea class="in" readonly rows="6" id="slackBox">產生專屬連結中…</textarea>`
+      :st.k==="pending"&&s.signer_email?`<div class="sec">通知員工簽收</div><p class="small muted">複製下方訊息貼到 Slack 私訊給員工，員工點連結登入即可線上簽名。</p><textarea class="in" readonly rows="6">${esc(slackMsg(s))}</textarea>`:""}`;
   const A=isAdmin();
   const foot=`<button class="btn primary" data-act="dlSo">下載簽收單</button><button class="btn" data-act="printSo">列印</button>
-    ${st.k==="pending"&&s.signer_email?`<button class="btn" data-act="copySlack">複製 Slack 通知</button>`:""}
+    ${st.k==="pending"&&(s.signer_email||(S.hasLinks&&A))?`<button class="btn" data-act="copySlack">複製 Slack 通知</button>`:""}
+    ${st.k==="pending"&&S.hasLinks&&A?`<button class="btn" data-act="signQR" data-id="${esc(id)}">當面掃碼簽名</button>`:""}
     ${A&&st.k==="pending"?`<button class="btn" data-act="paperSigned" data-id="${esc(id)}">標記紙本已簽回</button>`:""}
     ${A&&st.k==="pending"?`<button class="btn danger" data-act="voidSo" data-id="${esc(id)}" style="margin-left:auto">作廢</button>`:""}
     ${A&&st.k==="void"?`<button class="btn danger" data-act="delSo" data-id="${esc(id)}" style="margin-left:auto">刪除</button>`:""}`;
   openDrawer(`<span class="num">${esc(s.no)}</span>`, body, foot);
+  if(st.k==="pending"&&S.hasLinks&&A) soSignLink(s).then(l=>{ s.link=l; const b=$("#slackBox"); if(b&&soCache===s) b.value=slackMsgLink(s,l); }).catch(e=>{ const b=$("#slackBox"); if(b) b.value="無法產生連結："+dbErr(e); });
 }
 function appLink(){ return S.cfg.app_url || (location.origin+location.pathname); }
+const signBase = () => appLink().replace(/[?#].*$/,"");
+// 取得這張簽收單的專屬簽名連結（7 天有效；重複複製時沿用同一個）
+async function soSignLink(s){ const r=await q(S.sb.rpc("create_sign_link",{p_signoff:s.id,p_kind:"link"})); return signBase()+"#sign="+r.token; }
+function slackMsgLink(s,link){
+  const due=s.items.map(it=>it.due).filter(Boolean).sort()[0];
+  return [
+    `${s.employee_name} 你好，你有一張${SO_TYPE[s.type]}（共 ${s.items.length} 項設備）${due?`，借用設備請於 ${due} 前歸還`:""}，請點下方連結確認設備並簽名：`,
+    link, "",
+    "※ 不用登入，手機、電腦都可以簽",
+    "※ 連結 7 天內有效，簽完即失效，請勿轉傳給他人"
+  ].join("\n");
+}
 function slackMsg(s){
   // 手動貼到 Slack 時 <@ID> 不會變成標記，所以直接用姓名開頭（私訊本人即可收到通知）
   const due=s.items.map(it=>it.due).filter(Boolean).sort()[0], mail=s.signer_email||"你的公司 Email";
@@ -1023,9 +1040,93 @@ function slackMsg(s){
 }
 async function copyText(t,ok){ try{ await navigator.clipboard.writeText(t); toast(ok||"已複製"); }catch{ const ta=document.createElement("textarea"); ta.value=t; document.body.append(ta); ta.select(); try{ document.execCommand("copy"); toast(ok||"已複製"); }catch{ toast("無法自動複製，請手動選取文字","err"); } ta.remove(); } }
 async function copyAllSlack(){
-  const rows=await run(()=>fetchAll(()=>S.sb.from("signoffs").select(SO_COLS).eq("voided",false).is("signed_at",null).is("paper_signed_at",null).not("signer_email","is",null).order("created_at")));
-  if(!rows.length){ toast("沒有可線上簽收的待簽單據","err"); return; }
-  copyText(rows.map(slackMsg).join("\n\n———\n\n"),`已複製 ${rows.length} 則通知訊息`);
+  const links=S.hasLinks&&isAdmin();
+  let x=S.sb.from("signoffs").select(SO_COLS).eq("voided",false).is("signed_at",null).is("paper_signed_at",null);
+  if(!links) x=x.not("signer_email","is",null);
+  const rows=await run(()=>fetchAll(()=>x.order("created_at")));
+  if(!rows.length){ toast("沒有待簽收的單據","err"); return; }
+  let msgs;
+  if(links){ try{ msgs=[]; for(const r of rows) msgs.push(slackMsgLink(r, await soSignLink(r))); }catch(e){ toast(dbErr(e),"err"); return; } }
+  else msgs=rows.map(slackMsg);
+  copyText(msgs.join("\n\n———\n\n"),`已複製 ${rows.length} 則通知訊息`);
+}
+
+/* ================= 專屬簽名連結：員工不用登入就能簽 ================= */
+function heldHTML(held,open){
+  if(!held||!held.length) return "";
+  return `<details class="held" ${open?"open":""}><summary>你目前名下的設備（${held.length} 件）</summary>
+    <div class="list sign-items" style="margin-top:8px">${held.map((a,i)=>`<div class="li"><div class="row"><span class="num muted">${i+1}</span><span class="tag">${esc(a.tag)}</span><span class="st ${esc(a.status)}" style="margin-left:auto">${STATUS[a.status]||""}</span></div><div class="it-body">${esc(a.name)}${a.bm||a.since||a.due?`<div class="muted small">${esc(a.bm||"")}${a.since?`${a.bm?"・":""}${esc(String(a.since).replace(/-/g,"/"))} 領用`:""}${a.due?`・應於 ${esc(a.due)} 前歸還`:""}</div>`:""}</div></div>`).join("")}</div>
+    <p class="small muted" style="margin:8px 0 0">設備清單有誤，或有設備不在你手上時，請私訊 Admin。</p></details>`;
+}
+async function signPage(token){
+  screen(`<p class="muted">載入簽收單中…</p>`);
+  let v; try{ v=await q(S.sb.rpc("sign_link_view",{p_token:token})); }
+  catch(e){ screen(`<h1>無法開啟</h1><p class="muted">${esc(dbErr(e))}</p><button class="btn" onclick="location.reload()">重新整理</button>`); return; }
+  const fail={invalid:"這個簽名連結無效。請確認連結是否完整，或向 Admin 索取新的連結。",
+              voided:"這張簽收單已經作廢，請向 Admin 確認。",
+              used:"這個簽名連結已經使用過了。",
+              expired:"這個簽名連結已經過期，請向 Admin 索取新的連結。"};
+  if(v.status==="signed"){ screen(`<h1>已完成簽收</h1><p class="muted">簽收單 <span class="num">${esc(v.no)}</span> 已於 ${fmtDT(v.signed_at)} 簽收完成，不需要再簽一次。</p>${heldHTML(v.held,true)}`); $(".login-box").classList.add("sign-box"); $(".login").classList.add("sign-page"); return; }
+  if(v.status!=="ok"){ screen(`<h1>無法簽收</h1><p class="muted">${esc(fail[v.status]||fail.invalid)}</p>`); return; }
+  const cust=v.type==="custody";
+  $("#root").innerHTML=`<div class="login sign-page"><div class="login-box sign-box"><div class="brand-mark" aria-hidden="true"></div>
+    <p class="small muted" style="margin:0">${esc(v.company||"")} 設備簽收</p>
+    <h1 style="margin:4px 0 2px">${esc(SO_TYPE[v.type]||"設備簽收單")}</h1>
+    <p class="small muted" style="margin:0 0 14px"><span class="num">${esc(v.no)}</span>・${esc(v.employee_name)}（${esc(v.emp_no)}）${v.dept?"・"+esc(v.dept):""}</p>
+    <div class="list sign-items">${v.items.map((it,i)=>`<div class="li"><div class="row"><span class="num muted">${i+1}</span><span class="tag">${esc(it.tag)}</span></div><div class="it-body">${esc(it.name)}${it.bm||it.due||(cust&&it.state)?`<div class="muted small">${esc(it.bm||"")}${it.due?`${it.bm?"・":""}應於 ${esc(it.due)} 前歸還`:""}${cust&&it.state?`・${esc(it.state)}`:""}</div>`:""}</div></div>`).join("")}</div>
+    <div class="sec">保管規範</div><div class="terms">${esc(cust?CUSTODY_TERMS:v.terms||"")}</div>
+    <label class="row" style="margin:14px 0 10px;font-size:14px;align-items:flex-start"><input type="checkbox" id="agree" style="margin-top:3px"> ${cust?"我已確認上列設備的品項、數量與狀況無誤，並負責後續保管與借出管理。":"我已確認上列設備的品項、數量與狀況無誤，並同意遵守保管規範。"}</label>
+    <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="small muted" style="white-space:nowrap">請在框內簽名</span><button class="btn sm ghost" id="sigClear">重寫</button></div>
+    <div class="sigwrap"><canvas id="sigc"></canvas><div class="hint" id="sigHint">用手指或滑鼠在此簽名</div></div>
+    <button class="btn primary" id="sigGo" style="width:100%;margin-top:14px">確認簽收</button>
+    <p class="small muted" style="margin:12px 0 0">${v.kind==="qr"?"這是當面簽名用的 QR Code 連結，15 分鐘內有效。":"這個連結只給你本人使用，簽完即失效，請勿轉傳。"}</p>
+    ${heldHTML(v.held,false)}
+  </div></div>`;
+  const pad=sigPad($("#sigc"));
+  $("#sigClear").onclick=()=>{ pad.clear(); $("#sigHint").classList.remove("hide"); };
+  $("#sigc").addEventListener("pointerdown",()=>$("#sigHint").classList.add("hide"));
+  $("#sigGo").onclick=async()=>{
+    if(!$("#agree").checked){ toast("請先勾選確認聲明","err"); return; }
+    if(pad.empty()){ toast("請先簽名","err"); return; }
+    $("#sigGo").disabled=true;
+    try{
+      const r=await q(S.sb.rpc("sign_with_link",{p_token:token,p_sig:pad.path()}));
+      history.replaceState(null,"",location.pathname+location.search);
+      screen(`<h1>簽收完成，謝謝</h1><p class="muted">簽收單 <span class="num">${esc(r.no)}</span> 已於 ${fmtDT(r.signed_at)} 簽收完成，現在可以關閉這個頁面。</p>${heldHTML(v.held,true)}`);
+      $(".login-box").classList.add("sign-box"); $(".login").classList.add("sign-page");
+    }catch(e){ $("#sigGo").disabled=false; toast(dbErr(e),"err"); }
+  };
+}
+// 當面掃碼簽名：Admin 畫面顯示 QR Code，員工用手機掃描後簽名；簽完自動關閉並存檔 PDF
+let qrLib=null;
+async function signQR(id){
+  let r; try{ r=await run(()=>q(S.sb.rpc("create_sign_link",{p_signoff:id,p_kind:"qr"}))); }catch{ return; }
+  try{ await (qrLib ||= (window.qrcode?Promise.resolve():loadScript("https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"))); }
+  catch(e){ qrLib=null; toast("無法載入 QR Code 元件，請檢查網路","err"); return; }
+  const url=signBase()+"#sign="+r.token, so=soCache&&soCache.id===id?soCache:null;
+  const qr=qrcode(0,"M"); qr.addData(url); qr.make();
+  modal(`<h2>請員工用手機掃描簽名</h2>
+    <p class="small muted" style="margin:0 0 12px">${so?`${esc(so.employee_name)}・${esc(SO_TYPE[so.type])}・`:""}員工打開相機對準 QR Code，就會出現簽名頁面，不用登入。</p>
+    <div class="qrbox" aria-label="簽名 QR Code">${qr.createSvgTag({cellSize:6,margin:2,scalable:true})}</div>
+    <p class="small muted" id="qrLeft" style="text-align:center;margin:10px 0 0">15 分鐘內有效</p>
+    <p class="small muted" style="text-align:center;margin:4px 0 0">員工簽完後，這個視窗會自動關閉並存檔 PDF。</p>
+    <div class="row" style="margin-top:14px;justify-content:space-between"><button class="btn sm ghost" id="qrCopy">複製連結</button><button class="btn" data-close>關閉</button></div>`);
+  $("#qrCopy").onclick=()=>copyText(url,"已複製簽名連結");
+  const box=$(".qrbox"), until=new Date(r.expires_at).getTime();
+  const tick=async()=>{
+    if(!box.isConnected){ clearInterval(t); return; }
+    const left=Math.max(0,Math.round((until-Date.now())/1000));
+    $("#qrLeft").textContent=left?`剩 ${Math.floor(left/60)}:${String(left%60).padStart(2,"0")} 有效`:"QR Code 已過期，請關閉後重新產生";
+    if(!left){ clearInterval(t); box.style.opacity=.25; return; }
+    if(left%3) return;
+    const {data}=await S.sb.from("signoffs").select("*").eq("id",id).maybeSingle();
+    if(data&&data.signed_at&&box.isConnected){
+      clearInterval(t); closeModal(); toast("員工已完成簽名，正在存檔 PDF…");
+      try{ await archiveSo(data,{overwrite:true}); }catch(e){ console.warn("存檔失敗",e); }
+      refreshCounts(); openSo(id);
+    }
+  };
+  const t=setInterval(tick,1000); tick();
 }
 function formHTML(s){
   const st=soStatus(s), co=esc(S.cfg.company||""), hasDue=s.items.some(i=>i.due), hasSince=true;   // 領用日欄固定顯示
@@ -1049,10 +1150,10 @@ ${s.items.map((it,i)=>`<tr><td class="nw">${i+1}</td><td class="nw">${esc(it.tag
 <div class="terms">${esc(s.type==="custody"?CUSTODY_TERMS:S.cfg.terms)}</div>
 <p style="font-size:11pt">${s.type==="custody"?"本人已確認上列設備之品項、數量與狀況無誤，並負責後續保管與借出管理。":`本人已確認上列設備之品項、數量與狀況無誤，並同意遵守上述保管規範${s.type==="borrow"?"，且將於預計歸還日前歸還":""}。`}</p>
 <div class="sign"><div class="box"><div class="lab">${s.type==="custody"?"負責人簽名：":"員工簽名："}</div><div class="line">${sigSvg(s.signature)}</div>
-<div class="dt">${st.at?`簽署時間：${fmtDT(st.at)}${st.k==="signed"?"（線上簽署）":""}`:"日期：　　　年　　月　　日"}</div>
+<div class="dt">${st.at?`簽署時間：${fmtDT(st.at)}${st.k==="signed"?(s.signed_via==="link"?"（專屬連結簽署）":s.signed_via==="qr"?`（當面簽署・見證人：${esc(s.witness_name||"")}）`:"（線上簽署）"):""}`:"日期：　　　年　　月　　日"}</div>
 ${st.k==="signed"||st.k==="paper"?`<div class="seal">已簽收<small>${fmtD(st.at)}</small></div>`:""}</div>
 <div class="box"><div class="lab">Admin：</div><div class="line">${s.cs?sigSvg(s.cs.signature):""}</div><div class="dt">${s.cs?`${esc(s.cs.signer_name)}・簽署時間：${fmtDT(s.cs.signed_at)}`:"日期：　　　年　　月　　日"}</div></div></div>
-<div class="foot">本單由設備資產管理系統產生${st.k==="signed"?`，員工以 ${esc(s.signer_email)} 登入驗證後線上簽署`:""}。</div></body></html>`;
+<div class="foot">本單由設備資產管理系統產生${st.k==="signed"?(s.signed_via==="link"?"，員工透過 Admin 以 Slack 私訊提供的專屬簽名連結線上簽署":s.signed_via==="qr"?`，員工於 Admin ${esc(s.witness_name||"")} 見證下當面掃碼簽署`:`，員工以 ${esc(s.signer_email||"")} 登入驗證後線上簽署`):""}。</div></body></html>`;
 }
 function download(filename, data, type){
   const url=URL.createObjectURL(new Blob([data],{type})); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
@@ -1495,7 +1596,8 @@ document.addEventListener("click", async e=>{
     case "dlMine": openArchive(id,{fallback:async()=>dlSo(await soFull(id))}); break;
     case "openArchive": openArchive(id); break;
     case "archiveNow": archiveNow(id, b.dataset.over==="1"); break;
-    case "copySlack": copyText(slackMsg(soCache),"已複製 Slack 通知訊息"); break;
+    case "copySlack": if(S.hasLinks&&isAdmin()){ try{ const l=soCache.link||await soSignLink(soCache); soCache.link=l; copyText(slackMsgLink(soCache,l),"已複製 Slack 通知（含專屬簽名連結）"); }catch(e){ toast(dbErr(e),"err"); } } else copyText(slackMsg(soCache),"已複製 Slack 通知訊息"); break;
+    case "signQR": signQR(id); break;
     case "copyAllSlack": copyAllSlack(); break;
     case "paperSigned": confirmBox("標記為紙本已簽回？","請確認已收到員工親筆簽名的紙本簽收單並歸檔。","標記已簽回",async()=>{ await run(()=>q(S.sb.from("signoffs").update({paper_signed_at:new Date().toISOString()}).eq("id",id)),"已標記為紙本簽回"); refreshCounts(); updSos(true); await autoArchive(id); openSo(id); }); break;
     case "voidSo": confirmBox("作廢這張簽收單？","作廢後員工將無法再簽署此單，紀錄會保留。","作廢",async()=>{ await run(()=>q(S.sb.from("signoffs").update({voided:true}).eq("id",id)),"已作廢"); refreshCounts(); updSos(true); openSo(id); },true); break;
@@ -1633,6 +1735,8 @@ async function boot(){
     screen(`<h1>尚未完成設定</h1><p class="muted">請依照 README 的步驟，在 <code>config.js</code> 填入 Supabase 專案網址與 anon key。</p>`); return;
   }
   S.sb = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  const signTok=(location.hash.match(/^#sign=([A-Za-z0-9_-]{16,})/)||[])[1];
+  if(signTok){ signPage(signTok); return; }   // 專屬簽名連結：不用登入
   const {data:{session}} = await S.sb.auth.getSession();
   const hashErr = new URLSearchParams(location.hash.slice(1)).get("error_description");
   if(!session){ loginScreen(hashErr?"登入連結已失效，請重新寄送":""); return; }
@@ -1644,6 +1748,7 @@ async function boot(){
   try{ const [cfg]=await Promise.all([q(S.sb.from("settings").select("*").eq("id",1).single()), loadEmps()]); S.cfg=cfg; }
   catch(e){ toast(dbErr(e),"err"); }
   { const {error}=await S.sb.from("assets").select("custodian_id").limit(1); S.hasCust=!error; if(S.hasCust) A_COLS+=",custodian_id,custodian_name"; }
+  { const {error}=await S.sb.from("signoffs").select("signed_via").limit(1); S.hasLinks=!error; if(S.hasLinks) SO_COLS+=",signed_via,witness_name"; }
   shell(); await refreshCounts();
   go(isStaff()?"assets":"mine");
   if(isAdmin()) setTimeout(catchUpArchives, 4000);   // 補存還沒存檔的已簽收單
