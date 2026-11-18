@@ -589,6 +589,7 @@ async function openAsset(id){
     <label>狀態<select class="in" name="status">${Object.entries(STATUS).map(([k,l])=>`<option value="${k}" ${v.status===k?"selected":""}>${l}</option>`).join("")}</select></label>
     <label id="holderWrap" class="${GONE.has(v.status)?"hide":""}">保管人／借用人${empPicker("holder_id",v.holder_id)}</label>
     ${S.hasCust?`<label>負責人（測試機等由專人保管、借出的設備）${empPicker("custodian_id",v.custodian_id,"選填：輸入姓名或員工編號")}</label>`:""}
+    ${v.custodian_id&&v.custody_borrower?`<div class="full small" style="background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;line-height:1.6">目前由負責人 <b>${esc(v.custodian_name)}</b> 借給 <b>${esc(v.custody_borrower)}</b>${v.custody_due?`，應於 ${esc(v.custody_due.replace(/-/g,"/"))} 前歸還`:""}。<span class="muted">負責人借出的設備不需要填「保管人」；借出與歸還由負責人在「我的資產」登記，紀錄在下方「負責人借出紀錄」。</span></div>`:""}
     <label id="lastWrap" class="${GONE.has(v.status)?"":"hide"}">原保管人（遺失或報廢前的保管人）${empPicker("last_holder_id",v.last_holder_id,"輸入姓名、員工編號搜尋；不確定可留空")}</label>
     <label id="assignWrap" class="${v.holder_id?"":"hide"}">領用日<input class="in" type="date" name="assigned_date" value="${esc(v.assigned_date)}"></label>
     <label id="dueWrap" class="${v.status==="borrowed"?"":"hide"}"><span class="req">預計歸還日</span><input class="in" type="date" name="due_date" value="${esc(v.due_date)}"></label>
