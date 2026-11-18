@@ -631,6 +631,10 @@ async function saveAsset(id){
   if(fd.status==="borrowed" && !fd.due_date){ toast("請填寫預計歸還日","err"); f.due_date.focus(); return; }
   const data={...fd}; for(const k of ["holder_id","last_holder_id","custodian_id","due_date","assigned_date","purchase_date","warranty_end"]) data[k]=data[k]||null;
   if(!S.hasCust) delete data.custodian_id;
+  if(data.custodian_id&&data.holder_id===data.custodian_id){   // 負責的設備不算個人名下
+    data.holder_id=null; if(data.status==="in_use"||data.status==="borrowed"){ data.status="available"; data.due_date=null; } data.assigned_date=null;
+    toast("負責人和保管人相同：已清空保管人，這台設備改列在他的「負責的設備」");
+  }
   if(!GONE.has(data.status)) delete data.last_holder_id;   // 只有遺失／報廢時由畫面指定，其餘由系統自動記錄
   data.cost = fd.cost===""?null:Number(fd.cost);
   data.life_years = fd.life_years===""?null:Number(fd.life_years);
@@ -924,13 +928,37 @@ function soStatus(s){
 }
 async function newSo(eid,type){
   const e=S.emps.get(eid);
-  let mine=await run(()=>q(S.sb.from("assets").select("id,tag,name,status,due_date").eq("holder_id",eid).order("tag").limit(500)));
-  if(type==="borrow") mine=mine.filter(a=>a.status==="borrowed");
-  modal(`<h2>產生${SO_TYPE[type]}</h2><p class="muted small">${esc(e.name)}（${esc(e.emp_no)}）${e.email?"可以登入系統線上簽名。":"沒有 Email，請下載紙本給員工簽名。"}</p>
-    <div class="list" id="soPick" style="max-height:340px;overflow:auto">${mine.map(a=>`<label class="li"><input type="checkbox" value="${esc(a.id)}" checked><span class="tag">${esc(a.tag)}</span><span class="grow">${esc(a.name)}</span>${a.due_date?`<span class="due">應還 ${esc(a.due_date)}</span>`:""}</label>`).join("")}</div>
-    <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" data-close>取消</button><button class="btn primary" id="soGo">建立簽收單</button></div>`);
+  const cols="id,tag,name,status,due_date"+(S.hasCust?",custodian_id":"");
+  const [all,prev]=await run(()=>Promise.all([
+    q(S.sb.from("assets").select(cols).eq("holder_id",eid).order("tag").limit(1000)),
+    q(S.sb.from("signoffs").select("no,type,items,signed_at,paper_signed_at,created_at").eq("employee_id",eid).eq("voided",false).in("type",["issue","borrow"]).order("created_at",{ascending:false}).limit(200))
+  ]));
+  // 依狀態自動分類：領用單＝使用中、借用單＝借用中、歸還單＝兩者；負責設備（測試機等）一律排除
+  const fit={issue:a=>a.status==="in_use", borrow:a=>a.status==="borrowed", return:a=>a.status==="in_use"||a.status==="borrowed"}[type]||(()=>true);
+  const cust=all.filter(a=>a.custodian_id), held=all.filter(a=>!a.custodian_id);
+  const list=held.filter(fit), other=held.filter(a=>!fit(a));
+  // 已經簽過或已在待簽單裡的設備，預設不勾，避免重複
+  const done=new Map();
+  if(type!=="return") for(const so of prev) if(so.type===type) for(const it of so.items) if(!done.has(it.id)) done.set(it.id,{no:so.no,signed:!!(so.signed_at||so.paper_signed_at)});
+  const why={issue:"借用中的設備請用「產生借用單」",borrow:"使用中的設備請用「產生領用簽收單」",return:""}[type];
+  const row=a=>{ const d=done.get(a.id);
+    return `<label class="li"><input type="checkbox" value="${esc(a.id)}" ${d?"":"checked"}><span class="tag">${esc(a.tag)}</span><span class="grow">${esc(a.name)}${d?`<span class="muted small" style="display:block">${d.signed?"已簽收":"已在待簽單"}：${esc(d.no)}</span>`:""}</span>${a.due_date?`<span class="due">應還 ${esc(a.due_date)}</span>`:""}<span class="st ${a.status}">${STATUS[a.status]}</span></label>`; };
+  const nNew=list.filter(a=>!done.has(a.id)).length;
+  modal(`<h2>產生${SO_TYPE[type]}</h2><p class="muted small">${esc(e.name)}（${esc(e.emp_no)}）・已依設備狀態自動篩選${done.size?`，已簽過或已在待簽單裡的設備預設不勾選`:""}。</p>
+    ${list.length?`<div class="row" style="justify-content:space-between;margin:8px 0 6px"><span class="small"><b>${list.length}</b> 件符合，預設勾選 <b id="soCnt">${nNew}</b> 件</span><span class="row" style="gap:6px">${done.size?`<button class="btn sm ghost" id="soNew">只選未簽</button>`:""}<button class="btn sm ghost" id="soAll">全選</button><button class="btn sm ghost" id="soNone">全不選</button></span></div>
+    <div class="list" id="soPick" style="max-height:320px;overflow:auto">${list.map(row).join("")}</div>`
+    :`<p class="small" style="margin:12px 0">沒有符合的設備。${why}</p>`}
+    ${other.length||cust.length?`<details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">不會放進這張單的設備（${other.length+cust.length} 件）</summary><div class="small muted" style="margin-top:6px;line-height:1.7">
+      ${other.length?`${why?why+"：":""}${other.map(a=>`${esc(a.tag)}（${STATUS[a.status]}）`).join("、")}<br>`:""}
+      ${cust.length?`他負責的設備請用「產生負責設備盤點單」：${cust.map(a=>esc(a.tag)).join("、")}`:""}</div></details>`:""}
+    <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" data-close>取消</button><button class="btn primary" id="soGo" ${list.length?"":"disabled"}>建立簽收單</button></div>`);
+  const boxes=()=>[...document.querySelectorAll("#soPick input")], upd=()=>{ const c=$("#soCnt"); if(c) c.textContent=boxes().filter(x=>x.checked).length; };
+  $("#soPick")&&$("#soPick").addEventListener("change",upd);
+  $("#soAll")&&($("#soAll").onclick=()=>{ boxes().forEach(x=>x.checked=true); upd(); });
+  $("#soNone")&&($("#soNone").onclick=()=>{ boxes().forEach(x=>x.checked=false); upd(); });
+  $("#soNew")&&($("#soNew").onclick=()=>{ boxes().forEach(x=>x.checked=!done.has(x.value)); upd(); });
   $("#soGo").onclick=async()=>{
-    const ids=[...document.querySelectorAll("#soPick input:checked")].map(x=>x.value);
+    const ids=boxes().filter(x=>x.checked).map(x=>x.value);
     if(!ids.length){ toast("請至少勾選一項設備","err"); return; }
     $("#soGo").disabled=true;
     try{ const nid=await run(()=>q(S.sb.rpc("create_signoff",{p_employee:eid,p_type:type,p_assets:ids})),"已建立簽收單"); closeModal(); refreshCounts(); loadEmps().catch(()=>{}); openSo(nid); }
@@ -1534,6 +1562,8 @@ function importCSV(kind){
           ...(has("供應商")?{vendor:r["供應商"]||""}:{}), ...(has("採購人")?{purchaser:r["採購人"]||""}:{}), ...(has("發票號碼")?{invoice_no:r["發票號碼"]||""}:{}),
           ...(has("耐用年數")?{life_years:(Number(r["耐用年數"])>0?Number(r["耐用年數"]):null)}:{}),
           ...(has("預估殘值")?{salvage:(r["預估殘值"]!==""&&!isNaN(Number(r["預估殘值"].replace(/[^\d.]/g,"")))&&r["預估殘值"].replace(/[^\d.]/g,"")!==""?Number(r["預估殘值"].replace(/[^\d.]/g,"")):null)}:{})}; });
+      // 負責人就是保管人時（測試機等），不算個人名下：清空保管人、改為在庫可用
+      recs.forEach(x=>{ if(x.custodian_id&&x.holder_id===x.custodian_id){ x.holder_id=null; if(x.status==="in_use"||x.status==="borrowed"){ x.status="available"; x.due_date=null; } if("assigned_date" in x) x.assigned_date=null; } });
     } else {
       recs=rows.map(r=>({emp_no:r["員工編號"],name:r["姓名"]||r["員工編號"],dept:r["部門"]||"",email:(r["Email"]||"").toLowerCase()||null,slack_id:r["Slack ID"]||"",active:r["在職"]?!/否|離職|no|false/i.test(r["在職"]):true,
         ...(S.hasHire&&rows.length&&Object.prototype.hasOwnProperty.call(rows[0],"到職日")?{hire_date:dt(String(r["到職日"]||"").trim())}:{})}));
